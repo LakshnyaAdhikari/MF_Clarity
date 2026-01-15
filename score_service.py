@@ -24,10 +24,7 @@ def load_latest_features(engine):
 
     # load meta columns we expect; if some do not exist in DB this will still run
     # (we will add any missing columns later)
-    meta = pd.read_sql(
-        "SELECT fund_id, expense_ratio, aum_cr, top10_concentration, rating, category, turnover FROM funds",
-        engine
-    )
+    meta = pd.read_sql("SELECT fund_id, fund_name, expense_ratio, aum_cr, top10_concentration, rating, category, turnover FROM funds", engine)
 
     # ensure fund_id is same type for join
     df['fund_id'] = df['fund_id'].astype(str)
@@ -125,9 +122,19 @@ def persist_recommendations(engine, user_profile, scored_df, topk=3):
         conn.execute(q, {'u': json.dumps(user_profile), 'r': json.dumps(recs)})
     print(f"INFO: persisted {len(recs)} recommendations to recommendation_logs")
 
-def recommend(user_profile, topk=3, persist=False):
-    df = load_latest_features(engine)
+def recommend(user_profile, category_filter=None, topk=3, persist=False, df=None):
+    if df is None:
+        df = load_latest_features(engine)
+    
     scored = compute_scores(df, user_profile)
+    
+    # Apply Category Filter
+    if category_filter:
+        # category_filter can be a string (e.g., 'Equity', 'Debt')
+        # We perform a case-insensitive partial match on the 'category' column
+        mask = scored['category'].str.contains(category_filter, case=False, na=False)
+        scored = scored[mask]
+
     if persist:
         persist_recommendations(engine, user_profile, scored, topk=topk)
     return scored.head(topk)
