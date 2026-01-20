@@ -15,7 +15,17 @@ from auth_service import (
 )
 from memory_service import save_portfolio_snapshot, log_interaction, get_user_risk_score
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="MF-Clarity API", version="2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -49,6 +59,8 @@ class RecommendationResponse(BaseModel):
     allocation: Dict[str, float]
     portfolio: List[PortfolioItem]
     explanation: str
+    confidence_score: Optional[float] = 80.0
+    stability_label: Optional[str] = "High"
 
 # --- DEPENDENCIES ---
 
@@ -95,7 +107,29 @@ def register(user: UserRegister):
         raise HTTPException(status_code=500, detail=str(e))
     return {"message": "User created successfully"}
 
-# ... (Login remains same)
+@app.post("/token", response_model=Token)
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    # 1. Fetch User from DB
+    try:
+        with engine.connect() as conn:
+            user = conn.execute(text("SELECT email, password_hash FROM users WHERE email = :e"), {'e': form_data.username}).fetchone()
+    except Exception as e:
+         raise HTTPException(status_code=500, detail="Database error")
+
+    # 2. Authenticate
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 3. Create Token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 # --- APP ROUTES ---
 
@@ -132,6 +166,35 @@ def get_recommendation(profile: UserProfile, current_user_email: str = Depends(g
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+from chat_service import handle_chat_message
+
+class ChatRequest(BaseModel):
+    message: str
+    user_id: Optional[int] = None
+
+@app.post("/chat/message")
+def chat_endpoint(request: ChatRequest, current_user_email: Optional[str] = Depends(get_current_user)):
+    user_id = None
+    if current_user_email:
+        user_id = get_user_id(current_user_email)
+    
+    # Logic to fetch profile if needed
+    # For now, pass basic context
+    response = handle_chat_message(user_id, request.message)
+    return response
+
+from simulation_engine import run_simulation
+
+class SimulationRequest(BaseModel):
+    portfolio: List[PortfolioItem]
+    scenario_id: str
+
+@app.post("/simulate")
+def simulate_endpoint(req: SimulationRequest):
+    # Convert Pydantic list to dict list
+    port_list = [p.dict() for p in req.portfolio]
+    return run_simulation(port_list, req.scenario_id)
 
 @app.get("/funds")
 def list_funds(current_user: str = Depends(get_current_user)):

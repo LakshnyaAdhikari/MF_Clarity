@@ -1,7 +1,7 @@
 import pandas as pd
 from score_service import recommend, load_latest_features, engine
 from market_service import get_market_status
-from reasoning_engine import explain_portfolio
+from reasoning_engine import explain_portfolio, generate_confidence_score
 
 def allocate_assets(user_profile, market_phase):
     """
@@ -104,12 +104,17 @@ def generate_portfolio(user_profile):
     temp_data = {"user_profile": user_profile, "allocation": allocation}
     explanation = explain_portfolio(temp_data, market_status)
 
+    # 6. Calculate Confidence Score
+    stability_score = generate_confidence_score(portfolio, market_phase)
+
     return {
         "user_profile": user_profile,
         "market_status": market_status,
         "allocation": allocation,
         "portfolio": portfolio,
-        "explanation": explanation
+        "explanation": explanation,
+        "confidence_score": stability_score,
+        "stability_label": "High" if stability_score > 80 else "Moderate" if stability_score > 50 else "Low"
     }
 
 if __name__ == "__main__":

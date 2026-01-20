@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | MF-Clarity</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+        }
+
+        .sidebar {
+            height: fit-content;
+        }
+
+        .explanation-box {
+            background: rgba(0, 242, 234, 0.05);
+            border-left: 4px solid var(--color-primary);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border-radius: 4px;
+        }
+
+        .market-badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 1rem;
+        }
+
+        .market-OVERHEATED {
+            background: #ff4444;
+            color: white;
+        }
+
+        .market-NEUTRAL {
+            background: #ffbb33;
+            color: black;
+        }
+
+        .market-UNDERVALUED {
+            background: #00C851;
+            color: white;
+        }
+
+        /* Chat Widget */
+        .chat-widget {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .chat-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--color-primary);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0, 242, 234, 0.4);
+            transition: 0.3s;
+        }
+
+        .chat-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .chat-window {
+            width: 350px;
+            height: 500px;
+            background: #1a202c;
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .chat-header {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .chat-body {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .chat-in {
+            display: flex;
+            padding: 0.8rem;
+            border-top: 1px solid var(--glass-border);
+            gap: 0.5rem;
+        }
+
+        .chat-in input {
+            flex: 1;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+        }
+
+        .msg {
+            padding: 0.5rem 0.8rem;
+            border-radius: 8px;
+            max-width: 85%;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: var(--color-primary);
+            color: black;
+        }
+
+        .msg-ai {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .confidence-meter {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--color-text-dim);
+        }
+
+        .conf-val {
+            color: var(--color-primary);
+            font-weight: bold;
+        }
+
+        @media(max-width: 900px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="glass-nav">
+        <div class="logo">MF-Clarity <span style="font-size:0.8rem; opacity:0.7;">Dashboard</span></div>
+        <div class="nav-links">
+            <button id="logout-btn" class="btn-secondary">Logout</button>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <!-- Input Sidebar -->
+        <aside class="sidebar glass-panel">
+            <h3>Your Profile</h3>
+            <form id="dash-form">
+                <div class="form-group">
+                    <label>Age</label>
+                    <input type="number" name="age" value="30" min="18" max="100">
+                </div>
+
+                <div class="form-group">
+                    <label>Investment Amount (₹)</label>
+                    <input type="number" name="amount" value="100000" min="1000">
+                </div>
+
+                <div class="form-group">
+                    <label>Existing Investments (₹)</label>
+                    <input type="number" name="current_investments" value="0" min="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Goal Horizon (Years)</label>
+                    <input type="number" name="horizon_years" value="5" min="1" max="30">
+                </div>
+
+                <div class="form-group">
+                    <label>Primary Goal</label>
+                    <div class="radio-group" style="flex-wrap: wrap;">
+                        <label><input type="radio" name="goal" value="Wealth" checked> Wealth</label>
+                        <label><input type="radio" name="goal" value="Retirement"> Retirement</label>
+                        <label><input type="radio" name="goal" value="Tax"> Tax Save</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Risk Tolerance</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="risk_tolerance" value="Low"> Low</label>
+                        <label><input type="radio" name="risk_tolerance" value="Moderate" checked> Med</label>
+                        <label><input type="radio" name="risk_tolerance" value="High"> High</label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary full-width">Analyze & Recommend</button>
+            </form>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content">
+            <div id="initial-state" style="text-align: center; padding: 4rem;">
+                <h2>Welcome Back!</h2>
+                <p>Fill out your profile on the left to get a personalized portfolio recommendation.</p>
+            </div>
+
+            <div id="results-view" class="hidden">
+                <div class="glass-panel" style="margin-bottom: 2rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                        <h2>Strategy Analysis</h2>
+                        <div style="text-align:right;">
+                            <div id="market-phase-badge"></div>
+                            <div class="confidence-meter">
+                                Confidence: <span class="conf-val" id="conf-score">--</span>
+                                (<span id="conf-label">--</span>)
+                            </div>
+                        </div>
+                    </div>
+                    <div id="explanation-text" style="line-height: 1.6; color: var(--color-text-dim);"></div>
+                </div>
+
+                <div class="results-grid">
+                    <div class="allocation-chart glass-panel">
+                        <h3>Asset Allocation</h3>
+                        <div class="donut" id="allocation-donut"></div>
+                        <div class="legend" id="allocation-legend"></div>
+                    </div>
+
+                    <div class="fund-list" id="fund-list">
+                        <!-- Funds injected Here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Chat Widget -->
+    <div class="chat-widget">
+        <div id="chat-window" class="chat-window hidden">
+            <div class="chat-header">
+                <span>AI Assistant</span>
+                <span style="cursor:pointer;" onclick="toggleChat()">×</span>
+            </div>
+            <div class="chat-body" id="chat-body">
+                <div class="msg msg-ai">Hi! I can explain your portfolio or run simulations. Ask me anything!</div>
+            </div>
+            <div class="chat-in">
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button onclick="sendChat()" style="padding:0.2rem 0.8rem;">→</button>
+            </div>
+        </div>
+        <button class="chat-btn" onclick="toggleChat()">💬</button>
+    </div>
+
+    <script>
+        // Check Auth
+        const token = localStorage.getItem('access_token');
+        if (!token) window.location.href = 'login.html';
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            localStorage.removeItem('access_token');
+            window.location.href = 'landing.html'; // Assuming landing exists or redirect to signup
+        });
+
+        // Chat Logic
+        function toggleChat() {
+            document.getElementById('chat-window').classList.toggle('hidden');
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            // User Msg
+            addMsg(msg, 'user');
+            input.value = '';
+
+            try {
+                const res = await fetch('http://127.0.0.1:8000/chat/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ message: msg })
+                });
+                const data = await res.json();
+                addMsg(data.response, 'ai');
+            } catch (err) {
+                addMsg("Error connecting to AI.", 'ai');
+            }
+        }
+
+        function addMsg(text, type) {
+            const div = document.createElement('div');
+            div.className = `msg msg-${type}`;
+            div.innerText = text;
+            const body = document.getElementById('chat-body');
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+        }
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChat();
+        });
+
+        document.getElementById('dash-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const payload = Object.fromEntries(formData.entries());
+
+            // Type conversion
+            payload.amount = parseFloat(payload.amount);
+            payload.age = parseInt(payload.age);
+            payload.horizon_years = parseFloat(payload.horizon_years);
+            payload.current_investments = parseFloat(payload.current_investments);
+
+            const btn = e.target.querySelector('button');
+            const oldText = btn.innerText;
+            btn.innerText = "Analyzing...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('http://127.0.0.1:8000/recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.status === 401) {
+                    alert('Session expired. Please login again.');
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                if (!res.ok) throw new Error('Failed to fetch');
+
+                const data = await res.json();
+                renderDashboard(data);
+
+            } catch (err) {
+                console.error(err);
+                alert('Analysis failed. Ensure backend is running.');
+            } finally {
+                btn.innerText = oldText;
+                btn.disabled = false;
+            }
+        });
+
+        function renderDashboard(data) {
+            document.getElementById('initial-state').classList.add('hidden');
+            document.getElementById('results-view').classList.remove('hidden');
+
+            // 1. Market Phase & Explanation
+            const phase = data.market_status.phase;
+            const badge = document.getElementById('market-phase-badge');
+            badge.className = `market-badge market-${phase}`;
+            badge.innerText = `Market: ${phase}`;
+
+            // Confidence Score
+            document.getElementById('conf-score').innerText = data.confidence_score + '%';
+            document.getElementById('conf-label').innerText = data.stability_label || 'High';
+
+            // Format explanation text with bolding
+            let exp = data.explanation.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--color-primary)">$1</strong>');
+            exp = exp.replace(/\n/g, '<br>');
+            document.getElementById('explanation-text').innerHTML = exp;
+
+            // 2. Chart
+            const equityPct = (data.allocation.Equity * 100).toFixed(0);
+            const debtPct = (data.allocation.Debt * 100).toFixed(0);
+            const donut = document.getElementById('allocation-donut');
+            donut.style.background = `conic-gradient(var(--color-primary) 0% ${equityPct}%, var(--color-secondary) ${equityPct}% 100%)`;
+
+            document.getElementById('allocation-legend').innerHTML = `
+                <div style="margin-top:1rem; text-align:center;">
+                    <span style="color:var(--color-primary)">● Equity ${equityPct}%</span>
+                    <span style="color:var(--color-secondary); margin-left:1rem;">● Debt ${debtPct}%</span>
+                </div>
+            `;
+
+            // 3. Top Funds List
+            const list = document.getElementById('fund-list');
+            list.innerHTML = '';
+            data.portfolio.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'fund-card';
+                div.innerHTML = `
+                    <div class="fund-info">
+                        <h4>${item.fund_name || item.fund_id}</h4>
+                        <div class="meta">
+                            <span class="fund-badge">${item.category}</span>
+                            <span style="font-size:0.8rem; color:var(--color-text-dim);">Alloc: ${(item.weight * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                    <div class="fund-score">
+                        <div style="font-size:0.8rem;">Score</div>
+                        <div class="score-val">${(item.score * 100).toFixed(0)}</div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+    </script>
+</body>
+
+</html>

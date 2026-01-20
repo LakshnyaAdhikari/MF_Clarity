@@ -19,28 +19,36 @@ def get_market_status():
             
         current_price = hist['Close'].iloc[-1]
         
-        # Calculate Moving Averages
-        sma_200 = hist['Close'].rolling(window=200).mean().iloc[-1]
-        sma_50 = hist['Close'].rolling(window=50).mean().iloc[-1]
+        # Calculate Daily Returns
+        hist['returns'] = hist['Close'].pct_change()
+        
+        # Calculate Volatility (30-day annualized)
+        current_vol = hist['returns'].tail(30).std() * (252 ** 0.5) * 100
+        
+        # Regime Detection
+        regime = "Normal"
+        if current_vol > 20: regime = "Volatile"
+        elif current_vol < 10: regime = "Stable"
         
         # Simple Logic for Phase
-        # PE data is hard to get reliably free from yfinance, so we use Price vs SMA Trend as proxy along with momentum
-        
-        # If Current Price is > 15% above 200 SMA -> Potentially Overheated
         deviation_200 = (current_price - sma_200) / sma_200
         
         phase = "NEUTRAL"
-        details = f"Market is fair. Nifty @ {int(current_price)}."
+        phase_label = "Neutral"
         
         if deviation_200 > 0.15:
             phase = "OVERHEATED"
-            details = f"Market is running hot ({int(deviation_200*100)}% above 200 SMA). Caution advised."
+            phase_label = "Overheated"
         elif deviation_200 < -0.10:
             phase = "UNDERVALUED"
-            details = f"Market is corrected ({int(abs(deviation_200)*100)}% below 200 SMA). Good time to accumulate."
+            phase_label = "Undervalued"
+            
+        details = f"{regime} {phase_label} Market. Nifty @ {int(current_price)}. Volatility: {int(current_vol)}%."
         
         return {
             "phase": phase,
+            "regime": regime,
+            "volatility": round(current_vol, 1),
             "current_price": current_price,
             "sma_200": sma_200 if not pd.isna(sma_200) else current_price,
             "details": details

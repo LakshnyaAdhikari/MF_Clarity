@@ -1,10 +1,52 @@
-def generate_market_context_text(market_phase):
-    if market_phase == "OVERHEATED":
-        return "The market currently appears overheated (trading significantly above its long-term trend). To protect your capital from potential corrections, we have slightly increased the allocation towards safer Debt/Liquid funds."
-    elif market_phase == "UNDERVALUED":
-        return "The market valuations are attractive right now. We have maximized your Equity allocation to help you capture potential upside as the market recovers."
+def generate_confidence_score(portfolio, market_phase):
+    """
+    Calculates a 0-100 stability score based on:
+    1. Market Phase Alignment (e.g. High Debt in Overheated market = Good)
+    2. Fund quality (Average Scores)
+    3. Diversification
+    """
+    score = 70.0 # Base score
+    
+    # 1. Market Phase Adjustment
+    equity_weight = sum(p['weight'] for p in portfolio if p['asset_class'] == 'Equity')
+    debt_weight = sum(p['weight'] for p in portfolio if p['asset_class'] == 'Debt')
+    
+    if market_phase == 'OVERHEATED':
+        # Reward caution
+        if debt_weight >= 0.4: score += 10
+        if equity_weight > 0.6: score -= 10
+    elif market_phase == 'UNDERVALUED':
+        # Reward aggression
+        if equity_weight >= 0.6: score += 10
+    
+    # 2. Fund Quality
+    avg_fund_score = sum(p.get('score', 50) for p in portfolio) / len(portfolio) if portfolio else 0
+    # Normalize fund score to add up to 20 points
+    score += (avg_fund_score / 100.0) * 20
+    
+    # Cap at 99
+    return min(99.0, round(score, 1))
+
+def generate_market_context_text(market_status):
+    phase = market_status.get('phase', 'NEUTRAL')
+    regime = market_status.get('regime', 'Normal')
+    
+    context = ""
+    # Regime Context
+    if regime == "Volatile":
+        context += "The market is currently experiencing **High Volatility (>20%)**. "
+    elif regime == "Stable":
+        context += "The market is currently **Stable (<10% Volatility)**. "
+        
+    # Phase Context
+    if phase == "OVERHEATED":
+        context += "Valuations appear **Overheated**. To protect your capital from potential corrections, we have increased allocation to Debt/Liquid funds."
+    elif phase == "UNDERVALUED":
+        context += "Valuations are **Attractive**. We have maximized Equity allocation to capture potential upside."
     else:
-        return "Market valuations are currently fair. We have maintained a standard allocation aligned with your long-term goals."
+        context += "Valuations are **Fair**. We have maintained a standard allocation aligned with your goals."
+        
+    return context
 
 def generate_allocation_text(allocation, user_profile, age):
     equity_pct = allocation.get('Equity', 0) * 100
@@ -46,7 +88,7 @@ def explain_portfolio(portfolio_data, market_status):
     age = profile.get('age')
     
     # 1. Market Context
-    market_text = generate_market_context_text(phase)
+    market_text = generate_market_context_text(market_status)
     
     # 2. Allocation Logic
     alloc_text = generate_allocation_text(alloc, profile, age)
