@@ -128,6 +128,12 @@ def recommend(user_profile, category_filter=None, topk=3, persist=False, df=None
     
     scored = compute_scores(df, user_profile)
     
+    # FILTER: REGULAR PLANS ONLY (Business Logic)
+    # Exclude 'Direct' to ensure distributor commissions
+    scored = scored[~scored['fund_name'].str.contains('Direct', case=False, na=False)]
+    # Explicitly prefer 'Regular'
+    # scored = scored[scored['fund_name'].str.contains('Regular', case=False, na=False)]
+    
     # Apply Category Filter
     if category_filter:
         # category_filter can be a string (e.g., 'Equity', 'Debt')

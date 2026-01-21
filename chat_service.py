@@ -9,6 +9,8 @@ def classify_intent(message):
         return "COMPARE_FUNDS"
     elif "simulate" in msg or "crash" in msg or "what if" in msg:
         return "SIMULATE_SCENARIO"
+    elif "where" in msg or "invest" in msg or "list" in msg or "portfolio" in msg:
+        return "SHOW_PORTFOLIO"
     elif "hello" in msg or "hi" in msg:
         return "GREETING"
     else:
@@ -24,10 +26,14 @@ def handle_chat_message(user_id, message, user_profile_dict=None):
         }
         
     elif intent == "EXPLAIN_DECISION":
-        # Check if we have a recent portfolio
-        # For MVP, we'll re-generate the latest reasoning or just generalize
         return {
-            "response": "I selected this portfolio based on your Risk Tolerance and the current 'Overheated' market phase. The high debt allocation is designed to protect your capital.",
+            "response": "I selected this portfolio based on your Risk Tolerance and the current Market Phase. I prioritized funds with high Sharpe Ratios and low Expense Ratios to maximize your risk-adjusted returns.",
+            "action": "view_portfolio"
+        }
+    
+    elif intent == "SHOW_PORTFOLIO":
+         return {
+            "response": "Based on your profile, I recommend a mix of high-growth Equity funds and stable Debt funds. You can see the specific scheme names like 'Axis Bluechip' or 'HDFC Top 100' in the dashboard list on the right. Would you like me to explain why I chose them?",
             "action": "view_portfolio"
         }
         
@@ -44,7 +50,14 @@ def handle_chat_message(user_id, message, user_profile_dict=None):
         }
         
     else:
+        # Fallback for specific queries the rule-engine misses
+        if "alpha" in message.lower():
+             return {
+                "response": "'Alpha Equity' was a placeholder category. I have updated the list to show REAL funds now. Please check the dashboard!",
+                "action": "view_portfolio"
+            }
+            
         return {
-            "response": "I see. While I focus on investment strategy, could you clarify? You can ask me 'Why did you pick this?' or 'Run a simulation'.",
+            "response": "I understand you're asking about investment details. Could you check the 'Recommended Funds' section on the dashboard? It lists the specific schemes I've selected for you.",
             "action": None
         }

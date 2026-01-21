@@ -53,11 +53,17 @@ class PortfolioItem(BaseModel):
     score: float
     rationale: str
 
+class RecommendationsBreakdown(BaseModel):
+    lump_sum_total: float
+    sip_total: float
+
 class RecommendationResponse(BaseModel):
     user_profile: Dict[str, Any]
     market_status: Dict[str, Any]
     allocation: Dict[str, float]
     portfolio: List[PortfolioItem]
+    sections: Optional[Dict[str, List[PortfolioItem]]] = None
+    breakdown: Optional[RecommendationsBreakdown] = None
     explanation: str
     confidence_score: Optional[float] = 80.0
     stability_label: Optional[str] = "High"

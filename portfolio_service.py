@@ -64,41 +64,88 @@ def generate_portfolio(user_profile):
     
     portfolio = []
     
-    # 4. Select Funds (TOP 5 Strategy)
-    # Strategy: 3 Equity Funds (Large, Mid, Flexi ideally, but here simulated by 'Top') + 2 Debt Funds
+    # 4. Select Funds (Slot-Based Strategy)
+    portfolio = []
     
-    equity_amt = total_amount * allocation['Equity']
-    debt_amt = total_amount * allocation['Debt']
-    
-    # Helper to pick top N
-    def pick_funds(cat_filter, count, total_alloc_amt):
-        df_res = recommend(user_profile, category_filter=cat_filter, topk=count, df=df_features)
-        recs = df_res.to_dict(orient='records')
-        items = []
-        if not recs: return []
+    # --- EQUITY STRATEGY ---
+    equity_budget = total_amount * allocation['Equity']
+    if equity_budget > 0:
+        # A. Core: Large Cap or Index (50% of Equity)
+        core_amt = equity_budget * 0.50
+        core_funds = recommend(user_profile, category_filter='Large Cap', topk=1, df=df_features).to_dict('records')
+        if not core_funds: # Fallback to Index
+             core_funds = recommend(user_profile, category_filter='Index Fund', topk=1, df=df_features).to_dict('records')
         
-        weight_per_fund = 1.0 / len(recs)
-        for r in recs:
-            items.append({
-                "fund_id": r['fund_id'],
-                "fund_name": r.get('fund_name'),
-                "category": r.get('category'),
-                "asset_class": cat_filter,
-                "weight": round(weight_per_fund * (total_alloc_amt/total_amount), 4),
-                "amount": round(total_alloc_amt * weight_per_fund, 2),
-                "score": round(r.get('TotalScore', 0), 2),
-                "rationale": f"Top rated {cat_filter} Fund"
+        if core_funds:
+            f = core_funds[0]
+            portfolio.append({
+                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
+                "asset_class": "Equity", "weight": round(allocation['Equity'] * 0.50, 4),
+                "amount": round(core_amt, 2), "score": round(f.get('TotalScore', 0), 2),
+                "rationale": "Core Portfolio Anchor (Stability)"
             })
-        return items
 
-    if allocation['Equity'] > 0.1:
-        # We want diversity in Equity. Let's try to get 3 funds.
-        portfolio.extend(pick_funds('Equity', 3, equity_amt))
-        
-    if allocation['Debt'] > 0.1:
-        # 2 Debt funds
-        portfolio.extend(pick_funds('Debt', 2, debt_amt))
-        
+        # B. Growth: Flexi Cap (30% of Equity)
+        growth_amt = equity_budget * 0.30
+        growth_funds = recommend(user_profile, category_filter='Flexi Cap', topk=1, df=df_features).to_dict('records')
+        if growth_funds:
+            f = growth_funds[0]
+            portfolio.append({
+                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
+                "asset_class": "Equity", "weight": round(allocation['Equity'] * 0.30, 4),
+                "amount": round(growth_amt, 2), "score": round(f.get('TotalScore', 0), 2),
+                "rationale": "Flexi Cap for Growth across sectors"
+            })
+            
+        # C. Alpha: Mid/Small Cap (20% of Equity) - Only if Risk is NOT Low
+        if user_profile.get('risk_tolerance', 'Moderate').lower() != 'low':
+            alpha_amt = equity_budget * 0.20
+            alpha_funds = recommend(user_profile, category_filter='Mid Cap', topk=1, df=df_features).to_dict('records')
+            if alpha_funds:
+                f = alpha_funds[0]
+                portfolio.append({
+                    "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
+                    "asset_class": "Equity", "weight": round(allocation['Equity'] * 0.20, 4),
+                    "amount": round(alpha_amt, 2), "score": round(f.get('TotalScore', 0), 2),
+                    "rationale": "Mid Cap for extra returns (Alpha)"
+                })
+        else:
+            # If Low risk, move Alpha budget to Core
+            if portfolio: portfolio[0]['amount'] += round(equity_budget * 0.20, 2)
+            if portfolio: portfolio[0]['weight'] += round(allocation['Equity'] * 0.20, 4)
+
+    # --- DEBT STRATEGY ---
+    debt_budget = total_amount * allocation['Debt']
+    if debt_budget > 0:
+        # A. Safety: Liquid Fund (60% of Debt)
+        safe_amt = debt_budget * 0.60
+        safe_funds = recommend(user_profile, category_filter='Liquid', topk=1, df=df_features).to_dict('records')
+        if safe_funds:
+            f = safe_funds[0]
+            portfolio.append({
+                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
+                "asset_class": "Debt", "weight": round(allocation['Debt'] * 0.60, 4),
+                "amount": round(safe_amt, 2), "score": round(f.get('TotalScore', 0), 2),
+                "rationale": "Liquid Fund for Emergency access & Low Risk"
+            })
+            
+        # B. Yield: Corporate Bond / Gilt (40% of Debt)
+        yield_amt = debt_budget * 0.40
+        yield_cat = 'Gilt' if user_profile.get('risk_tolerance') == 'Low' else 'Corporate Bond'
+        yield_funds = recommend(user_profile, category_filter=yield_cat, topk=1, df=df_features).to_dict('records')
+        # Fallback to debt generic
+        if not yield_funds: 
+             yield_funds = recommend(user_profile, category_filter='Debt', topk=1, df=df_features).to_dict('records')
+
+        if yield_funds:
+            f = yield_funds[0]
+            portfolio.append({
+                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
+                "asset_class": "Debt", "weight": round(allocation['Debt'] * 0.40, 4),
+                "amount": round(yield_amt, 2), "score": round(f.get('TotalScore', 0), 2),
+                "rationale": f"{yield_cat} for better Yield stability"
+            })
+
     # 5. Generate Explanation
     # Construct a temporary structure to pass to reasoning engine
     temp_data = {"user_profile": user_profile, "allocation": allocation}
@@ -107,11 +154,23 @@ def generate_portfolio(user_profile):
     # 6. Calculate Confidence Score
     stability_score = generate_confidence_score(portfolio, market_phase)
 
+    # 7. Structure Output for UI
+    equity_schemes = [p for p in portfolio if p['asset_class'] == 'Equity']
+    debt_schemes = [p for p in portfolio if p['asset_class'] == 'Debt']
+    
     return {
         "user_profile": user_profile,
         "market_status": market_status,
         "allocation": allocation,
-        "portfolio": portfolio,
+        "portfolio": portfolio, # Keep flat list for legacy or charts
+        "sections": {
+            "equity": equity_schemes,
+            "debt": debt_schemes
+        },
+        "breakdown": {
+            "lump_sum_total": total_amount,
+            "sip_total": round(total_amount * 0.015, 0) # 1.5% monthly SIP typical
+        },
         "explanation": explanation,
         "confidence_score": stability_score,
         "stability_label": "High" if stability_score > 80 else "Moderate" if stability_score > 50 else "Low"

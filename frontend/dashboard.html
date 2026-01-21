@@ -165,6 +165,18 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .section-header {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 0.5rem;
+            color: var(--color-primary);
+        }
     </style>
 </head>
 
@@ -242,6 +254,21 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Investment Breakdown Box -->
+                    <div
+                        style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius:8px; margin-bottom:1rem; display:flex; gap:2rem;">
+                        <div>
+                            <small style="color:var(--color-text-dim)">Lump Sum Investment</small>
+                            <div style="font-size:1.4rem; font-weight:bold;">₹<span id="lump-val">0</span></div>
+                        </div>
+                        <div>
+                            <small style="color:var(--color-text-dim)">Suggested Monthly SIP</small>
+                            <div style="font-size:1.4rem; font-weight:bold; color:var(--color-secondary);">₹<span
+                                    id="sip-val">0</span></div>
+                        </div>
+                    </div>
+
                     <div id="explanation-text" style="line-height: 1.6; color: var(--color-text-dim);"></div>
                 </div>
 
@@ -285,12 +312,18 @@
 
         document.getElementById('logout-btn').addEventListener('click', () => {
             localStorage.removeItem('access_token');
-            window.location.href = 'landing.html'; // Assuming landing exists or redirect to signup
+            window.location.href = 'landing.html';
         });
 
         // Chat Logic
         function toggleChat() {
-            document.getElementById('chat-window').classList.toggle('hidden');
+            const win = document.getElementById('chat-window');
+            if (win.classList.contains('hidden')) {
+                win.classList.remove('hidden');
+                // Auto focus logic if needed
+            } else {
+                win.classList.add('hidden');
+            }
         }
 
         async function sendChat() {
@@ -388,7 +421,13 @@
             document.getElementById('conf-score').innerText = data.confidence_score + '%';
             document.getElementById('conf-label').innerText = data.stability_label || 'High';
 
-            // Format explanation text with bolding
+            // Investment Breakdown
+            if (data.breakdown) {
+                document.getElementById('lump-val').innerText = data.breakdown.lump_sum_total.toLocaleString('en-IN');
+                document.getElementById('sip-val').innerText = data.breakdown.sip_total.toLocaleString('en-IN');
+            }
+
+            // Explanation
             let exp = data.explanation.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--color-primary)">$1</strong>');
             exp = exp.replace(/\n/g, '<br>');
             document.getElementById('explanation-text').innerHTML = exp;
@@ -406,27 +445,45 @@
                 </div>
             `;
 
-            // 3. Top Funds List
+            // 3. Top Funds List (Sectioned)
             const list = document.getElementById('fund-list');
             list.innerHTML = '';
-            data.portfolio.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'fund-card';
-                div.innerHTML = `
-                    <div class="fund-info">
-                        <h4>${item.fund_name || item.fund_id}</h4>
-                        <div class="meta">
-                            <span class="fund-badge">${item.category}</span>
-                            <span style="font-size:0.8rem; color:var(--color-text-dim);">Alloc: ${(item.weight * 100).toFixed(1)}%</span>
+
+            // Helper to render section
+            const renderSection = (title, items) => {
+                if (!items || items.length === 0) return;
+                const h = document.createElement('h4');
+                h.className = 'section-header';
+                h.innerText = title;
+                list.appendChild(h);
+
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'fund-card';
+                    div.innerHTML = `
+                        <div class="fund-info">
+                            <h4>${item.fund_name || item.fund_id}</h4>
+                            <div class="meta">
+                                <span class="fund-badge">${item.category}</span>
+                                <span style="font-size:0.8rem; color:var(--color-text-dim);">Alloc: ${(item.weight * 100).toFixed(1)}% (₹${item.amount.toLocaleString('en-IN')})</span>
+                            </div>
                         </div>
-                    </div>
-                    <div class="fund-score">
-                        <div style="font-size:0.8rem;">Score</div>
-                        <div class="score-val">${(item.score * 100).toFixed(0)}</div>
-                    </div>
-                `;
-                list.appendChild(div);
-            });
+                        <div class="fund-score">
+                            <div style="font-size:0.8rem;">Score</div>
+                            <div class="score-val">${(item.score * 100).toFixed(0)}</div>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            };
+
+            // Use 'sections' if available, else fall back to 'portfolio'
+            if (data.sections) {
+                renderSection('Equity Schemes', data.sections.equity);
+                renderSection('Debt Schemes', data.sections.debt);
+            } else {
+                renderSection('Recommended Funds', data.portfolio);
+            }
         }
     </script>
 </body>
