@@ -52,6 +52,7 @@ class PortfolioItem(BaseModel):
     amount: float
     score: float
     rationale: str
+    metrics: Optional[Dict[str, float]] = None
 
 class RecommendationsBreakdown(BaseModel):
     lump_sum_total: float
@@ -177,6 +178,7 @@ from chat_service import handle_chat_message
 
 class ChatRequest(BaseModel):
     message: str
+    context: Optional[Dict[str, Any]] = None
     user_id: Optional[int] = None
 
 @app.post("/chat/message")
@@ -187,7 +189,7 @@ def chat_endpoint(request: ChatRequest, current_user_email: Optional[str] = Depe
     
     # Logic to fetch profile if needed
     # For now, pass basic context
-    response = handle_chat_message(user_id, request.message)
+    response = handle_chat_message(user_id, request.message, context=request.context)
     return response
 
 from simulation_engine import run_simulation

@@ -16,9 +16,22 @@ def classify_intent(message):
     else:
         return "GENERAL_QA"
 
-def handle_chat_message(user_id, message, user_profile_dict=None):
+def handle_chat_message(user_id, message, user_profile_dict=None, context=None):
     intent = classify_intent(message)
     
+    # 1. Context-Aware Explanation
+    if context and context.get('funds'):
+        funds = context['funds']
+        if intent == "EXPLAIN_DECISION" or "why" in message.lower() or "explain" in message.lower():
+            # Build specific explanation
+            details = []
+            for f in funds:
+                metrics = f.get('metrics', {})
+                details.append(f"• **{f['fund_name']}**: Selected for its {f.get('rationale')} (Sharpe: {metrics.get('sharpe', 'N/A')})")
+            
+            response_text = "Here is the specific reasoning for your portfolio:\n\n" + "\n".join(details)
+            return {"response": response_text, "action": None}
+
     if intent == "GREETING":
         return {
             "response": "Hello! I am your AI Investment Assistant. I can explain your portfolio options, compare funds, or simulate market scenarios. How can I help?",

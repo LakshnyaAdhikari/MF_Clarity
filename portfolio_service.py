@@ -82,7 +82,12 @@ def generate_portfolio(user_profile):
                 "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
                 "asset_class": "Equity", "weight": round(allocation['Equity'] * 0.50, 4),
                 "amount": round(core_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "Core Portfolio Anchor (Stability)"
+                "rationale": "Core Portfolio Anchor (Stability)",
+                "metrics": {
+                    "sharpe": round(f.get('sharpe', 0), 2),
+                    "volatility": round(f.get('ann_vol', 0)*100, 1),
+                    "returns": round(f.get('ann_return', 0)*100, 1)
+                }
             })
 
         # B. Growth: Flexi Cap (30% of Equity)
@@ -94,7 +99,12 @@ def generate_portfolio(user_profile):
                 "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
                 "asset_class": "Equity", "weight": round(allocation['Equity'] * 0.30, 4),
                 "amount": round(growth_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "Flexi Cap for Growth across sectors"
+                "rationale": "Flexi Cap for Growth across sectors",
+                "metrics": {
+                    "sharpe": round(f.get('sharpe', 0), 2),
+                    "volatility": round(f.get('ann_vol', 0)*100, 1),
+                    "returns": round(f.get('ann_return', 0)*100, 1)
+                }
             })
             
         # C. Alpha: Mid/Small Cap (20% of Equity) - Only if Risk is NOT Low
@@ -107,7 +117,12 @@ def generate_portfolio(user_profile):
                     "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
                     "asset_class": "Equity", "weight": round(allocation['Equity'] * 0.20, 4),
                     "amount": round(alpha_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                    "rationale": "Mid Cap for extra returns (Alpha)"
+                    "rationale": "Mid Cap for extra returns (Alpha)",
+                    "metrics": {
+                        "sharpe": round(f.get('sharpe', 0), 2),
+                        "volatility": round(f.get('ann_vol', 0)*100, 1),
+                        "returns": round(f.get('ann_return', 0)*100, 1)
+                    }
                 })
         else:
             # If Low risk, move Alpha budget to Core
@@ -126,7 +141,12 @@ def generate_portfolio(user_profile):
                 "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
                 "asset_class": "Debt", "weight": round(allocation['Debt'] * 0.60, 4),
                 "amount": round(safe_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "Liquid Fund for Emergency access & Low Risk"
+                "rationale": "Liquid Fund for Emergency access & Low Risk",
+                "metrics": {
+                    "sharpe": round(f.get('sharpe', 0), 2),
+                    "volatility": round(f.get('ann_vol', 0)*100, 1),
+                    "returns": round(f.get('ann_return', 0)*100, 1)
+                }
             })
             
         # B. Yield: Corporate Bond / Gilt (40% of Debt)
@@ -143,7 +163,12 @@ def generate_portfolio(user_profile):
                 "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
                 "asset_class": "Debt", "weight": round(allocation['Debt'] * 0.40, 4),
                 "amount": round(yield_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": f"{yield_cat} for better Yield stability"
+                "rationale": f"{yield_cat} for better Yield stability",
+                "metrics": {
+                    "sharpe": round(f.get('sharpe', 0), 2),
+                    "volatility": round(f.get('ann_vol', 0)*100, 1),
+                    "returns": round(f.get('ann_return', 0)*100, 1)
+                }
             })
 
     # 5. Generate Explanation

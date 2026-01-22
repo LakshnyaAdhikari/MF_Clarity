@@ -177,6 +177,68 @@
             padding-bottom: 0.5rem;
             color: var(--color-primary);
         }
+
+        /* Expandable Card Styles */
+        .fund-card {
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .fund-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .fund-details-panel {
+            margin-top: 1rem;
+            padding: 1.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            display: none;
+            font-size: 0.95rem;
+            border: 1px solid var(--glass-border);
+        }
+
+        .fund-details-panel.open {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-box {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--color-text-dim);
+        }
+
+        .metric-val {
+            font-weight: bold;
+            color: var(--color-text-light);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 
@@ -310,6 +372,8 @@
         const token = localStorage.getItem('access_token');
         if (!token) window.location.href = 'login.html';
 
+        let currentPortfolio = null; // Store for Context
+
         document.getElementById('logout-btn').addEventListener('click', () => {
             localStorage.removeItem('access_token');
             window.location.href = 'landing.html';
@@ -336,10 +400,15 @@
             input.value = '';
 
             try {
+                const payload = {
+                    message: msg,
+                    context: currentPortfolio ? { funds: currentPortfolio.portfolio } : null
+                };
+
                 const res = await fetch('http://127.0.0.1:8000/chat/message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ message: msg })
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
                 addMsg(data.response, 'ai');
@@ -396,6 +465,7 @@
                 if (!res.ok) throw new Error('Failed to fetch');
 
                 const data = await res.json();
+                currentPortfolio = data; // Save context
                 renderDashboard(data);
 
             } catch (err) {
@@ -457,20 +527,57 @@
                 h.innerText = title;
                 list.appendChild(h);
 
-                items.forEach(item => {
+                items.forEach((item, index) => {
+                    const uniqueId = `fund-detail-${index}-${Math.random().toString(36).substr(2, 9)}`;
+                    const metrics = item.metrics || { sharpe: '-', volatility: '-', returns: '-' };
+
                     const div = document.createElement('div');
                     div.className = 'fund-card';
+                    div.onclick = (e) => {
+                        // Prevent toggling if clicking a specific button (future proofing)
+                        const panel = document.getElementById(uniqueId);
+                        panel.classList.toggle('open');
+                    };
+
                     div.innerHTML = `
-                        <div class="fund-info">
-                            <h4>${item.fund_name || item.fund_id}</h4>
-                            <div class="meta">
-                                <span class="fund-badge">${item.category}</span>
-                                <span style="font-size:0.8rem; color:var(--color-text-dim);">Alloc: ${(item.weight * 100).toFixed(1)}% (₹${item.amount.toLocaleString('en-IN')})</span>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div class="fund-info">
+                                <h4>${item.fund_name || item.fund_id}</h4>
+                                <div class="meta">
+                                    <span class="fund-badge">${item.category}</span>
+                                    <span style="font-size:0.8rem; color:var(--color-text-dim);">Alloc: ${(item.weight * 100).toFixed(1)}% (₹${item.amount.toLocaleString('en-IN')})</span>
+                                </div>
+                            </div>
+                            <div class="fund-score">
+                                <div style="font-size:0.8rem;">Score</div>
+                                <div class="score-val">${(item.score * 100).toFixed(0)}</div>
                             </div>
                         </div>
-                        <div class="fund-score">
-                            <div style="font-size:0.8rem;">Score</div>
-                            <div class="score-val">${(item.score * 100).toFixed(0)}</div>
+                        
+                        <!-- DETAILS PANEL -->
+                        <div id="${uniqueId}" class="fund-details-panel">
+                            <div class="metrics-grid">
+                                <div class="metric-box">
+                                    <div class="metric-label">1Y Returns</div>
+                                    <div class="metric-val" style="color:var(--color-secondary);">${metrics.returns}%</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="metric-label">Volatility</div>
+                                    <div class="metric-val">${metrics.volatility}%</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="metric-label">Sharpe Ratio</div>
+                                    <div class="metric-val">${metrics.sharpe}</div>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--color-text-dim); margin-bottom:0.5rem;">
+                                <strong>Why this fund?</strong><br>
+                                ${item.rationale || "Selected based on high risk-adjusted returns."}
+                            </div>
+                            <!-- Placeholder for Alternatives -->
+                            <div style="text-align:right;">
+                                <button class="btn-secondary" style="font-size:0.75rem; padding:0.2rem 0.6rem;" onclick="event.stopPropagation(); alert('Alternatives feature coming soon!')">Find Alternatives</button>
+                            </div>
                         </div>
                     `;
                     list.appendChild(div);

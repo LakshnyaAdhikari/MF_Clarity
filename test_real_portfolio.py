@@ -20,10 +20,12 @@ def test():
         print("\n--- EQUITY ---")
         for p in res['sections']['equity']:
             print(f"- {p['fund_name']} ({p['category']}) | {p['weight']*100}% | ₹{p['amount']}")
+            if 'metrics' in p: print(f"  Metrics: {p['metrics']}")
             
         print("\n--- DEBT ---")
         for p in res['sections']['debt']:
             print(f"- {p['fund_name']} ({p['category']}) | {p['weight']*100}% | ₹{p['amount']}")
+            if 'metrics' in p: print(f"  Metrics: {p['metrics']}")
             
     except Exception as e:
         print("ERROR:", e)
