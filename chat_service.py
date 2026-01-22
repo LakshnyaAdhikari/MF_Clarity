@@ -11,7 +11,9 @@ def classify_intent(message):
         return "SIMULATE_SCENARIO"
     elif "where" in msg or "invest" in msg or "list" in msg or "portfolio" in msg:
         return "SHOW_PORTFOLIO"
-    elif "hello" in msg or "hi" in msg:
+    elif "alternative" in msg or "replace" in msg or "option" in msg:
+        return "ALTERNATIVES"
+    elif "hello" in msg or msg.strip() == "hi" or " hi " in msg:
         return "GREETING"
     else:
         return "GENERAL_QA"
@@ -61,6 +63,25 @@ def handle_chat_message(user_id, message, user_profile_dict=None, context=None):
             "response": "Run a simulation? I can stress-test your portfolio against the 2008 Crash or 2020 Covid Pandemic.",
             "action": "trigger_simulation"
         }
+
+    elif intent == "ALTERNATIVES":
+        from portfolio_service import get_alternatives
+        alts = get_alternatives()
+        
+        # Simple heuristic: Check which category fits the context/message
+        target_cat = "Corporate Bond" # Default for the user's specific query
+        if "liquid" in message.lower(): target_cat = "Liquid"
+        elif "equity" in message.lower() or "large" in message.lower(): target_cat = "Large Cap"
+        elif "mid" in message.lower(): target_cat = "Mid Cap"
+        elif "flexi" in message.lower(): target_cat = "Flexi Cap"
+        
+        # Format Response
+        items = alts.get(target_cat, [])[:5]
+        txt = f"Here are 5 alternatives for **{target_cat}** schemes (scored 0-100):\n\n"
+        for i, fund in enumerate(items, 1):
+            txt += f"{i}. **{fund['fund_name']}** (Score: {fund['score']})\n"
+            
+        return { "response": txt, "action": "view_list" }
         
     else:
         # Fallback for specific queries the rule-engine misses
@@ -69,6 +90,7 @@ def handle_chat_message(user_id, message, user_profile_dict=None, context=None):
                 "response": "'Alpha Equity' was a placeholder category. I have updated the list to show REAL funds now. Please check the dashboard!",
                 "action": "view_portfolio"
             }
+        
             
         return {
             "response": "I understand you're asking about investment details. Could you check the 'Recommended Funds' section on the dashboard? It lists the specific schemes I've selected for you.",

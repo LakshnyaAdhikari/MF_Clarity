@@ -201,6 +201,33 @@ def generate_portfolio(user_profile):
         "stability_label": "High" if stability_score > 80 else "Moderate" if stability_score > 50 else "Low"
     }
 
+
+def get_alternatives(limit=5):
+    """
+    Returns alternative funds for each category to support 'What else?' queries.
+    """
+    df_features = load_latest_features(engine)
+    alternatives = {}
+    
+    # 1. Categories to find alts for
+    categories = ['Large Cap', 'Flexi Cap', 'Mid Cap', 'Liquid', 'Corporate Bond', 'Gilt']
+    
+    for cat in categories:
+        # Get top 10 for this category
+        recs = recommend({'risk_tolerance': 'High'}, category_filter=cat, topk=10, df=df_features)
+        
+        # Format for chat
+        alts = []
+        for _, row in recs.iterrows():
+            alts.append({
+                "fund_name": row['fund_name'],
+                "score": round(row['TotalScore'] * 100, 0),
+                "risk": "High" if row['ann_vol'] > 0.15 else "Low"
+            })
+        alternatives[cat] = alts
+        
+    return alternatives
+
 if __name__ == "__main__":
     # Test
     u = {'amount': 100000, 'horizon_years': 10, 'risk_tolerance': 'High', 'age': 30}
