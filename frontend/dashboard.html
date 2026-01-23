@@ -540,19 +540,19 @@
                     };
 
                     div.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div class="fund-info">
-                                <h4>${item.fund_name || item.fund_id}</h4>
-                                <div class="meta">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 1rem;">
+                            <div class="fund-info" style="flex: 1; max-width: 75%;">
+                                <h4 style="margin:0; line-height:1.2; word-wrap: break-word;">${item.fund_name || item.fund_id}</h4>
+                                <div class="meta" style="margin-top:0.4rem;">
                                     <span class="fund-badge">${item.category}</span>
-                                    <span style="font-size:0.8rem; color:var(--color-text-dim);">Alloc: ${(item.weight * 100).toFixed(1)}% (₹${item.amount.toLocaleString('en-IN')})</span>
+                                    <span style="font-size:0.8rem; color:var(--color-text-dim); display:inline-block; margin-top:0.2rem;">Alloc: ${(item.weight * 100).toFixed(1)}% (₹${item.amount.toLocaleString('en-IN')})</span>
                                 </div>
                             </div>
-                            <div class="fund-score">
-                                <div style="font-size:0.8rem;">Score</div>
-                                <div class="score-val">${(item.score * 100).toFixed(0)}</div>
+                            <div class="fund-score" style="flex-shrink: 0; min-width: 60px; text-align: right; margin-left: 1rem;">
+                                <div style="font-size:0.8rem; color:var(--color-text-dim)">Score</div>
+                                <div class="score-val" style="font-size:1.4rem; line-height: 1;">${(item.score * 100).toFixed(0)}</div>
                             </div>
-                        </div>
+                        </div>` + `
                         
                         <!-- DETAILS PANEL -->
                         <div id="${uniqueId}" class="fund-details-panel">
