@@ -31,6 +31,12 @@ def get_market_status():
         elif current_vol < 10: regime = "Stable"
         
         # Simple Logic for Phase
+        sma_200 = hist['Close'].rolling(window=200).mean().iloc[-1]
+        
+        # If not enough data for 200 SMA, fallback
+        if pd.isna(sma_200):
+             sma_200 = hist['Close'].mean() # Fallback to average of available history
+        
         deviation_200 = (current_price - sma_200) / sma_200
         
         phase = "NEUTRAL"

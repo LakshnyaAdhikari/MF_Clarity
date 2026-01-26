@@ -46,12 +46,22 @@ def compute_metrics(nav_df):
     metrics['ret_6m'] = comp_ret(6)
     metrics['ret_12m'] = comp_ret(12)
     metrics['ret_36m'] = comp_ret(36)
+    metrics['ret_60m'] = comp_ret(60)
 
     monthly_mean = monthly.mean()
     ann_return = (1 + monthly_mean) ** 12 - 1
     ann_vol = monthly.std() * math.sqrt(12) if monthly.std() is not None else float('nan')
     metrics['ann_return'] = float(ann_return) if pd.notna(ann_return) else None
     metrics['ann_vol'] = float(ann_vol) if pd.notna(ann_vol) else None
+
+    # Consistency Score: Inverse of Standard Deviation of returns across horizons (1y, 3y, 5y)
+    # Penalize dispersion.
+    returns_list = [metrics['ret_12m'], metrics['ret_36m'], metrics['ret_60m']]
+    valid_rets = [r for r in returns_list if r is not None and not math.isnan(r)]
+    if len(valid_rets) >= 2:
+        metrics['ret_consistency'] = 1.0 / (np.std(valid_rets) + 0.01) # Avoid div by zero
+    else:
+        metrics['ret_consistency'] = None
 
     rf = 0.04
     metrics['sharpe'] = float((metrics['ann_return'] - rf) / metrics['ann_vol']) if metrics['ann_vol'] and metrics['ann_vol'] > 0 else None
@@ -71,13 +81,14 @@ def upsert_features(engine, fund_id, as_of, metrics):
     if not metrics:
         return
     insert_sql = text("""
-    INSERT INTO fund_features (fund_id, as_of_date, ret_1m, ret_3m, ret_6m, ret_12m, ret_36m,
+    INSERT INTO fund_features (fund_id, as_of_date, ret_1m, ret_3m, ret_6m, ret_12m, ret_36m, ret_60m, ret_consistency,
                                ann_return, ann_vol, sharpe, max_drawdown, pct_pos_months_36, updated_at)
-    VALUES (:fund_id, :as_of, :ret_1m, :ret_3m, :ret_6m, :ret_12m, :ret_36m,
+    VALUES (:fund_id, :as_of, :ret_1m, :ret_3m, :ret_6m, :ret_12m, :ret_36m, :ret_60m, :ret_consistency,
             :ann_return, :ann_vol, :sharpe, :max_drawdown, :pct_pos_36, now())
     ON CONFLICT (fund_id, as_of_date) DO UPDATE SET
       ret_1m = EXCLUDED.ret_1m, ret_3m = EXCLUDED.ret_3m, ret_6m = EXCLUDED.ret_6m,
-      ret_12m = EXCLUDED.ret_12m, ret_36m = EXCLUDED.ret_36m,
+      ret_12m = EXCLUDED.ret_12m, ret_36m = EXCLUDED.ret_36m, ret_60m = EXCLUDED.ret_60m,
+      ret_consistency = EXCLUDED.ret_consistency,
       ann_return = EXCLUDED.ann_return, ann_vol = EXCLUDED.ann_vol, sharpe = EXCLUDED.sharpe,
       max_drawdown = EXCLUDED.max_drawdown, pct_pos_months_36 = EXCLUDED.pct_pos_months_36, updated_at = now()
     """)
@@ -87,6 +98,8 @@ def upsert_features(engine, fund_id, as_of, metrics):
               'ret_6m': metrics.get('ret_6m'),
               'ret_12m': metrics.get('ret_12m'),
               'ret_36m': metrics.get('ret_36m'),
+              'ret_60m': metrics.get('ret_60m'),
+              'ret_consistency': metrics.get('ret_consistency'),
               'ann_return': metrics.get('ann_return'),
               'ann_vol': metrics.get('ann_vol'),
               'sharpe': metrics.get('sharpe'),

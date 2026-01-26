@@ -239,6 +239,50 @@
                 transform: translateY(0);
             }
         }
+
+        /* Results Grid */
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 2rem;
+        }
+
+        .allocation-chart {
+            text-align: center;
+            height: fit-content;
+        }
+
+        .donut {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            margin: 1.5rem auto;
+            position: relative;
+            background: conic-gradient(var(--color-primary) 0% 60%, var(--color-secondary) 60% 100%);
+        }
+
+        .donut::after {
+            content: "";
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: #111;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .legend {
+            font-size: 0.85rem;
+            color: var(--color-text-dim);
+        }
+
+        @media(max-width: 1100px) {
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -585,8 +629,21 @@
             };
 
             // Use 'sections' if available, else fall back to 'portfolio'
+            // Use 'sections' if available, else fall back to 'portfolio'
             if (data.sections) {
                 renderSection('Equity Schemes', data.sections.equity);
+
+                // Add Commodity & Thematic/Other
+                // We accept 'commodity' or any other custom keys from backend if we decided to group them there.
+                // But currently portfolio_service puts them in 'portfolio' list but maybe not 'sections'?
+                // Let's filter from flat list if sections don't have them explicitly.
+
+                const commodities = data.portfolio.filter(p => p.asset_class === 'Commodity' || p.asset_class === 'Gold');
+                const thematic = data.portfolio.filter(p => p.asset_class.includes('Thematic'));
+
+                renderSection('Commodities / Gold', commodities);
+                renderSection('Thematic / Alpha', thematic);
+
                 renderSection('Debt Schemes', data.sections.debt);
             } else {
                 renderSection('Recommended Funds', data.portfolio);

@@ -13,8 +13,15 @@ if not DB_URL:
 engine = create_engine(DB_URL)
 
 WEIGHTS = {
-    'RAR': 0.28, 'ST': 0.18, 'CS': 0.12, 'LIQ': 0.08,
-    'CN': 0.08, 'FH': 0.06, 'TF': 0.10, 'PF': 0.05
+    'RAR': 0.15,  # Sharpe (Risk-Adjusted Return) - Reduced
+    'CONS': 0.20, # Consistency (New) - High Priority
+    'VOL': 0.15,  # Low Volatility - High Priority
+    'DD': 0.10,   # Low Drawdown
+    'LIQ': 0.10,  # AUM/Liquidity
+    'CN': 0.05,   # Concentration
+    'FH': 0.05,   # Rating
+    'TF': 0.10,   # Tax/Goal Fit
+    'PF': 0.10    # Positive Months (Reliability)
 }
 
 def load_latest_features(engine):
@@ -30,13 +37,15 @@ def load_latest_features(engine):
     df['fund_id'] = df['fund_id'].astype(str)
     meta['fund_id'] = meta['fund_id'].astype(str)
 
+    # meta overlap columns to drop from df if present
+    drop_cols = ['expense_ratio', 'aum_cr', 'top10_concentration', 'rating']
+    df.drop(columns=[c for c in drop_cols if c in df.columns], inplace=True, errors='ignore')
+
     merged = df.merge(meta, on='fund_id', how='left')
 
     # Debug print: columns present
-    print("DEBUG: fund_features columns:", df.columns.tolist())
-    print("DEBUG: funds(meta) columns:", meta.columns.tolist())
-    print("DEBUG: merged columns:", merged.columns.tolist())
-
+    # print("DEBUG: fund_features columns:", df.columns.tolist())
+    
     return merged
 
 def percentile_rank(series):
@@ -46,7 +55,7 @@ def ensure_columns(df, cols_defaults):
     """Ensure dataframe has required columns; if not, create with default."""
     for c, default in cols_defaults.items():
         if c not in df.columns:
-            print(f"INFO: column '{c}' missing — creating with default {default!r}")
+            # print(f"INFO: column '{c}' missing — creating with default {default!r}")
             df[c] = default
     return df
 
@@ -56,29 +65,36 @@ def compute_scores(df, user_profile):
         'sharpe': 0.0, 'ann_return': 0.0, 'ann_vol': 0.0, 'max_drawdown': 0.0,
         'expense_ratio': 0.0, 'aum_cr': 0.0, 'top10_concentration': 0.0,
         'pct_pos_months_36': 0.0, 'manager_tenure_years': 0.0, 'rating': 3.0,
-        'turnover': 0.0, 'inflow_1y_pct': 0.0
+        'turnover': 0.0, 'inflow_1y_pct': 0.0, 'ret_consistency': 0.0
     }
     df = ensure_columns(df, defaults)
 
+    # HARD FILTER: AUM > 1000 Crore (User Constraint)
+    # We set score to 0 for small funds instead of dropping to allow observability
+    df['is_small_aum'] = df['aum_cr'] < 1000
+
     # build percentiles (fillna handled by ensure_columns)
     df['sharpe_pct'] = percentile_rank(df['sharpe'].fillna(0))
-    df['ann_return_pct'] = percentile_rank(df['ann_return'].fillna(0))
-    df['ann_vol_pct'] = 1 - percentile_rank(df['ann_vol'].fillna(0))
-    df['max_drawdown_pct'] = 1 - percentile_rank(df['max_drawdown'].fillna(0))
+    df['ann_vol_pct'] = 1 - percentile_rank(df['ann_vol'].fillna(100)) # Lower is better
+    df['max_drawdown_pct'] = 1 - percentile_rank(df['max_drawdown'].fillna(-1)) # Lower magnitude (closer to 0) is better
     df['expense_ratio_pct'] = 1 - percentile_rank(df['expense_ratio'].fillna(0))
     df['aum_pct'] = percentile_rank(df['aum_cr'].fillna(0))
     df['top10_conc_pct'] = 1 - percentile_rank(df['top10_concentration'].fillna(0))
-    df['pct_pos_36_pct'] = percentile_rank(df['pct_pos_months_36'].fillna(0))
-    df['manager_tenure_pct'] = percentile_rank(df['manager_tenure_years'].fillna(0))
     df['rating_pct'] = percentile_rank(df['rating'].fillna(3))
+    
+    # New Consistency/Reliability Metrics
+    df['consistency_pct'] = percentile_rank(df['ret_consistency'].fillna(0))
+    df['pos_months_pct'] = percentile_rank(df['pct_pos_months_36'].fillna(0))
 
     # component scores
     df['RAR'] = df['sharpe_pct']
-    df['ST'] = 0.6 * df['pct_pos_36_pct'] + 0.4 * df['manager_tenure_pct']
-    df['CS'] = df['expense_ratio_pct']
+    df['CONS'] = df['consistency_pct']
+    df['VOL'] = df['ann_vol_pct']
+    df['DD'] = df['max_drawdown_pct']
     df['LIQ'] = 0.7 * df['aum_pct'] + 0.3 * percentile_rank(df['turnover'].fillna(0))
     df['CN'] = df['top10_conc_pct']
     df['FH'] = df['rating_pct']
+    df['PF'] = df['pos_months_pct']
 
     # TF: goal match (rudimentary)
     def goal_tax_fit(cat, goal):
@@ -86,25 +102,26 @@ def compute_scores(df, user_profile):
         cat = (cat or "").lower()
         if goal == 'tax saving' and 'elss' in cat:
             return 1.0
-        if goal in ('retirement', 'wealth') and any(k in cat for k in ('hybrid', 'large', 'index', 'large cap')):
-            return 0.9
         if goal == 'safety' and 'debt' in cat:
             return 1.0
         return 0.7
 
     df['TF'] = df['category'].apply(lambda c: goal_tax_fit(c, user_profile.get('goal', 'wealth')))
-    df['PF'] = 0.5
 
     df['TotalScore'] = (
         WEIGHTS['RAR']*df['RAR'] +
-        WEIGHTS['ST']*df['ST'] +
-        WEIGHTS['CS']*df['CS'] +
+        WEIGHTS['CONS']*df['CONS'] +
+        WEIGHTS['VOL']*df['VOL'] +
+        WEIGHTS['DD']*df['DD'] +
         WEIGHTS['LIQ']*df['LIQ'] +
         WEIGHTS['CN']*df['CN'] +
         WEIGHTS['FH']*df['FH'] +
         WEIGHTS['TF']*df['TF'] +
         WEIGHTS['PF']*df['PF']
     )
+    
+    # Apply Hard Penalty for Small AUM
+    df.loc[df['is_small_aum'], 'TotalScore'] = 0
 
     # penalties (apply safely)
     df.loc[df['max_drawdown'] < -0.35, 'TotalScore'] -= 0.12
