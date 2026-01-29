@@ -547,17 +547,37 @@
             document.getElementById('explanation-text').innerHTML = exp;
 
             // 2. Chart
-            const equityPct = (data.allocation.Equity * 100).toFixed(0);
-            const debtPct = (data.allocation.Debt * 100).toFixed(0);
-            const donut = document.getElementById('allocation-donut');
-            donut.style.background = `conic-gradient(var(--color-primary) 0% ${equityPct}%, var(--color-secondary) ${equityPct}% 100%)`;
+            const equityPct = ((data.allocation.Equity || 0) * 100).toFixed(0);
+            const debtPct = ((data.allocation.Debt || 0) * 100).toFixed(0);
+            const commPct = ((data.allocation.Commodity || 0) * 100).toFixed(0);
 
-            document.getElementById('allocation-legend').innerHTML = `
+            const donut = document.getElementById('allocation-donut');
+
+            // Calculate stops for conic gradient
+            // Equity: 0% -> Eq
+            // Debt: Eq -> Eq+Debt
+            // Commodity: Eq+Debt -> 100%
+            const eqEnd = parseInt(equityPct);
+            const debtEnd = eqEnd + parseInt(debtPct);
+
+            donut.style.background = `conic-gradient(
+                var(--color-primary) 0% ${eqEnd}%, 
+                var(--color-secondary) ${eqEnd}% ${debtEnd}%,
+                #FFD700 ${debtEnd}% 100%
+            )`;
+
+            let legendHtml = `
                 <div style="margin-top:1rem; text-align:center;">
                     <span style="color:var(--color-primary)">● Equity ${equityPct}%</span>
                     <span style="color:var(--color-secondary); margin-left:1rem;">● Debt ${debtPct}%</span>
-                </div>
             `;
+
+            if (parseInt(commPct) > 0) {
+                legendHtml += `<span style="color:#FFD700; margin-left:1rem;">● Gold ${commPct}%</span>`;
+            }
+            legendHtml += `</div>`;
+
+            document.getElementById('allocation-legend').innerHTML = legendHtml;
 
             // 3. Top Funds List (Sectioned)
             const list = document.getElementById('fund-list');

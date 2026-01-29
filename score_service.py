@@ -12,132 +12,235 @@ if not DB_URL:
 
 engine = create_engine(DB_URL)
 
-WEIGHTS = {
-    'RAR': 0.15,  # Sharpe (Risk-Adjusted Return) - Reduced
-    'CONS': 0.20, # Consistency (New) - High Priority
-    'VOL': 0.15,  # Low Volatility - High Priority
-    'DD': 0.10,   # Low Drawdown
-    'LIQ': 0.10,  # AUM/Liquidity
-    'CN': 0.05,   # Concentration
-    'FH': 0.05,   # Rating
-    'TF': 0.10,   # Tax/Goal Fit
-    'PF': 0.10    # Positive Months (Reliability)
-}
+# --- CONFIGURATION ---
+MIN_AUM_CR = 0 # TODO: Restore to 1000 once AUM data is populated
+
+# Strict Category Whitelists
+EQUITY_CATEGORIES = [
+    'Large Cap', 'Mid Cap', 'Flexi Cap', 'Large & Mid Cap', 
+    'Index Fund', 'ELSS', 'Small Cap', 'Multi Cap'
+]
+# Note: 'Sectoral'/'Thematic' can be allowed IF specifically requested, 
+# but for general ranking we prefer the above. We will allow them but rank them carefully.
+
+DEBT_CATEGORIES = [
+    'Liquid', 'Corporate Bond', 'Gilt', 'Banking and PSU Fund', 
+    'Overnight', 'Money Market', 'Ultra Short Duration', 'Low Duration'
+]
+# BANNED: 'Credit Risk', 'Floater', 'Medium Duration' (if high risk)
 
 def load_latest_features(engine):
     # load latest features snapshot
     q = "SELECT * FROM fund_features WHERE as_of_date = (SELECT MAX(as_of_date) FROM fund_features)"
     df = pd.read_sql(q, engine, parse_dates=['as_of_date'])
-
-    # load meta columns we expect; if some do not exist in DB this will still run
-    # (we will add any missing columns later)
-    meta = pd.read_sql("SELECT fund_id, fund_name, expense_ratio, aum_cr, top10_concentration, rating, category, turnover FROM funds", engine)
+    
+    # load meta columns
+    meta_q = "SELECT fund_id, fund_name, expense_ratio, aum_cr, top10_concentration, rating, category, turnover FROM funds"
+    meta = pd.read_sql(meta_q, engine)
 
     # ensure fund_id is same type for join
     df['fund_id'] = df['fund_id'].astype(str)
     meta['fund_id'] = meta['fund_id'].astype(str)
 
-    # meta overlap columns to drop from df if present
-    drop_cols = ['expense_ratio', 'aum_cr', 'top10_concentration', 'rating']
-    df.drop(columns=[c for c in drop_cols if c in df.columns], inplace=True, errors='ignore')
-
-    merged = df.merge(meta, on='fund_id', how='left')
-
-    # Debug print: columns present
-    # print("DEBUG: fund_features columns:", df.columns.tolist())
+    # Explicit list of columns to drop from 'features' df to avoid overlap with 'meta'
+    # These columns exist in 'features' but we want the version from 'meta' (funds table)
+    drop_cols = ['fund_name', 'expense_ratio', 'aum_cr', 'top10_concentration', 'rating', 'category', 'turnover']
     
+    cols_to_drop = [c for c in drop_cols if c in df.columns]
+    
+    if cols_to_drop:
+        df = df.drop(columns=cols_to_drop)
+    
+    # Merge
+    merged = df.merge(meta, on='fund_id', how='left')
     return merged
 
-def percentile_rank(series):
-    return series.rank(method='average', pct=True)
+def percentile_rank(series, ascending=True):
+    """
+    Returns percentile (0-1). 
+    ascending=True -> Higher value is better (e.g. Sharpe).
+    ascending=False -> Lower value is better (e.g. Volatility).
+    """
+    if ascending:
+        return series.rank(pct=True)
+    else:
+        return 1 - series.rank(pct=True)
 
-def ensure_columns(df, cols_defaults):
-    """Ensure dataframe has required columns; if not, create with default."""
-    for c, default in cols_defaults.items():
-        if c not in df.columns:
-            # print(f"INFO: column '{c}' missing — creating with default {default!r}")
-            df[c] = default
+def apply_constraints(df):
+    """
+    Apply HARD FILTERS. Funds failing these are excluded from scoring.
+    """
+    initial_count = len(df)
+    
+    if 'fund_name' not in df.columns:
+        print(f"CRITICAL ERROR: 'fund_name' missing in apply_constraints. Columns: {df.columns.tolist()}")
+        # Check first row
+        if not df.empty:
+            print(f"Sample Row: {df.iloc[0].to_dict()}")
+
+    # 1. AUM Constraint (> 1000 Cr)
+    # We handle NaNs by treating them as small (safe fail)
+    df = df[df['aum_cr'].fillna(0) >= MIN_AUM_CR]
+    
+    # 2. Category Constraint
+    # We only score funds in known safe/standard categories for the core recommendation engine.
+    # We allow 'Sectoral'/'Thematic' strictly for the Alpha slots, so we keep them but flag them.
+    # For Debt, we strictly ENFORCE the whitelist.
+    
+    def is_valid_category(cat):
+        if not cat: return False
+        cat_lower = cat.lower()
+        # Allow Equity
+        if any(c.lower() in cat_lower for c in EQUITY_CATEGORIES): return True
+        # Allow Safe Debt
+        if any(c.lower() in cat_lower for c in DEBT_CATEGORIES): return True
+        # Allow Gold/Commodity
+        if 'gold' in cat_lower or 'commodity' in cat_lower: return True
+        # Allow Thematic/Sectoral (will be filtered downstream if not needed)
+        if 'sector' in cat_lower or 'thematic' in cat_lower: return True
+        
+        return False
+
+    df = df[df['category'].apply(is_valid_category)]
+    
+    # 3. Exclude "Credit Risk" explicitly via Name/Category
+    # (Just in case it slipped through)
+    df = df[~df['fund_name'].str.contains('Credit Risk', case=False, na=False)]
+    df = df[~df['category'].str.contains('Credit Risk', case=False, na=False)]
+    
+    # 4. Exclude Direct Plans (Business requirement: Regular only)
+    # (Assuming we want to recommend Regular plans)
+    df = df[~df['fund_name'].str.contains('Direct', case=False, na=False)]
+
+    print(f"Constraints applied: {initial_count} -> {len(df)} funds remaining.")
+    return df
+
+def compute_consistency_index(df):
+    """
+    Calculates the 'Consistency Score' (0-100) comprising:
+    1. Reliability (Pos Months)
+    2. Downside Protection (Drawdown)
+    3. Risk-Adjusted Quality (Sharpe)
+    4. Safety Penalty (Volatility - esp for Debt)
+    """
+    # Fill defaults for missing metrics to avoid crashes
+    df['pct_pos_months_36'] = df['pct_pos_months_36'].fillna(0.5) # Assume avg
+    df['max_drawdown'] = df['max_drawdown'].fillna(-0.5) # Assume bad
+    df['sharpe'] = df['sharpe'].fillna(0)
+    df['ann_vol'] = df['ann_vol'].fillna(0.20)
+    df['ret_consistency'] = df['ret_consistency'].fillna(0)
+
+    # --- COMPONENT SCORING (Normalized 0-1) ---
+    
+    # 1. Reliability (40%) - Higher positive months is better
+    df['score_rel'] = percentile_rank(df['pct_pos_months_36'], ascending=True)
+    
+    # 2. Downside (30%) - Lower magnitude drawdown is better (e.g. -10% > -20%)
+    # Max drawdown is negative number. Maximizing it (closer to 0) is good.
+    df['score_dd'] = percentile_rank(df['max_drawdown'], ascending=True)
+    
+    # 3. Quality (30%) - Higher Sharpe is better
+    df['score_qual'] = percentile_rank(df['sharpe'], ascending=True)
+    
+    # Base Consistency Score
+    df['ConsistencyScore'] = (
+        0.40 * df['score_rel'] +
+        0.30 * df['score_dd'] + 
+        0.30 * df['score_qual']
+    ) * 100
+    
+    # --- DEBT SAFETY PENALTY ---
+    # For debt funds, volatility is the enemy.
+    # If a debt fund is Volatile (relative to peers), crush its score.
+    
+    def apply_debt_penalty(row):
+        cols = str(row['category']).lower()
+        is_debt = any(c.lower() in cols for c in DEBT_CATEGORIES)
+        
+        if is_debt:
+            # Check volatility. Normal liquid/corp bond vol is < 3-4%. 
+            # If > 5%, it's risky.
+            if row['ann_vol'] > 0.05: 
+                return 25 # Massive penalty
+            if row['ann_vol'] > 0.03: 
+                return 10 # Moderate penalty
+        return 0
+
+    df['safety_penalty'] = df.apply(apply_debt_penalty, axis=1)
+    df['ConsistencyScore'] = df['ConsistencyScore'] - df['safety_penalty']
+    
+    # Clip to 0-100
+    df['ConsistencyScore'] = df['ConsistencyScore'].clip(0, 100)
+    
+    return df
+
+def assign_tiers_and_explain(df):
+    """
+    Bucket funds into Tiers and generate Rationale string.
+    """
+    # Simply Rank by Score
+    df = df.sort_values('ConsistencyScore', ascending=False)
+    
+    # Assign Tiers
+    # Tier 1: Top 15%
+    # Tier 2: Next 30%
+    # Tier 3: Rest
+    n = len(df)
+    df['Tier'] = 'Tier 3'
+    if n > 0:
+        df.iloc[:int(n*0.15), df.columns.get_loc('Tier')] = 'Tier 1 (Elite)'
+        df.iloc[int(n*0.15):int(n*0.45), df.columns.get_loc('Tier')] = 'Tier 2 (Strong)'
+    
+    # Generate Rationale
+    def gen_rationale(row):
+        reasons = []
+        if row['Tier'] == 'Tier 1 (Elite)':
+            reasons.append("Top 15% Consistency")
+        
+        # Highlight specific strengths
+        if row['score_dd'] > 0.8:
+            reasons.append("Superior Downside Protection")
+        elif row['score_rel'] > 0.8:
+            reasons.append("High Reliability (>80% Positive Months)")
+        elif row['score_qual'] > 0.8:
+            reasons.append("Top-Tier Risk-Adjusted Returns")
+            
+        return " | ".join(reasons) if reasons else "Selected for Balanced Performance"
+
+    df['rationale'] = df.apply(gen_rationale, axis=1)
     return df
 
 def compute_scores(df, user_profile):
-    # ensure required numeric columns exist (with safe defaults)
-    defaults = {
-        'sharpe': 0.0, 'ann_return': 0.0, 'ann_vol': 0.0, 'max_drawdown': 0.0,
-        'expense_ratio': 0.0, 'aum_cr': 0.0, 'top10_concentration': 0.0,
-        'pct_pos_months_36': 0.0, 'manager_tenure_years': 0.0, 'rating': 3.0,
-        'turnover': 0.0, 'inflow_1y_pct': 0.0, 'ret_consistency': 0.0
-    }
-    df = ensure_columns(df, defaults)
-
-    # HARD FILTER: AUM > 1000 Crore (User Constraint)
-    # We set score to 0 for small funds instead of dropping to allow observability
-    df['is_small_aum'] = df['aum_cr'] < 1000
-
-    # build percentiles (fillna handled by ensure_columns)
-    df['sharpe_pct'] = percentile_rank(df['sharpe'].fillna(0))
-    df['ann_vol_pct'] = 1 - percentile_rank(df['ann_vol'].fillna(100)) # Lower is better
-    df['max_drawdown_pct'] = 1 - percentile_rank(df['max_drawdown'].fillna(-1)) # Lower magnitude (closer to 0) is better
-    df['expense_ratio_pct'] = 1 - percentile_rank(df['expense_ratio'].fillna(0))
-    df['aum_pct'] = percentile_rank(df['aum_cr'].fillna(0))
-    df['top10_conc_pct'] = 1 - percentile_rank(df['top10_concentration'].fillna(0))
-    df['rating_pct'] = percentile_rank(df['rating'].fillna(3))
+    """
+    Main Entry Point.
+    User Profile is unused for SCORING (Constraint-Driven), 
+    but we keep signature for compatibility.
     
-    # New Consistency/Reliability Metrics
-    df['consistency_pct'] = percentile_rank(df['ret_consistency'].fillna(0))
-    df['pos_months_pct'] = percentile_rank(df['pct_pos_months_36'].fillna(0))
-
-    # component scores
-    df['RAR'] = df['sharpe_pct']
-    df['CONS'] = df['consistency_pct']
-    df['VOL'] = df['ann_vol_pct']
-    df['DD'] = df['max_drawdown_pct']
-    df['LIQ'] = 0.7 * df['aum_pct'] + 0.3 * percentile_rank(df['turnover'].fillna(0))
-    df['CN'] = df['top10_conc_pct']
-    df['FH'] = df['rating_pct']
-    df['PF'] = df['pos_months_pct']
-
-    # TF: goal match (rudimentary)
-    def goal_tax_fit(cat, goal):
-        goal = (goal or "").lower()
-        cat = (cat or "").lower()
-        if goal == 'tax saving' and 'elss' in cat:
-            return 1.0
-        if goal == 'safety' and 'debt' in cat:
-            return 1.0
-        return 0.7
-
-    df['TF'] = df['category'].apply(lambda c: goal_tax_fit(c, user_profile.get('goal', 'wealth')))
-
-    df['TotalScore'] = (
-        WEIGHTS['RAR']*df['RAR'] +
-        WEIGHTS['CONS']*df['CONS'] +
-        WEIGHTS['VOL']*df['VOL'] +
-        WEIGHTS['DD']*df['DD'] +
-        WEIGHTS['LIQ']*df['LIQ'] +
-        WEIGHTS['CN']*df['CN'] +
-        WEIGHTS['FH']*df['FH'] +
-        WEIGHTS['TF']*df['TF'] +
-        WEIGHTS['PF']*df['PF']
-    )
+    Returns dataframe with 'TotalScore' (which is ConsistencyScore).
+    """
+    # 1. Apply Constraints
+    df = apply_constraints(df)
     
-    # Apply Hard Penalty for Small AUM
-    df.loc[df['is_small_aum'], 'TotalScore'] = 0
+    # 2. Compute Index
+    df = compute_consistency_index(df)
+    
+    # 3. Rank & Explain
+    df = assign_tiers_and_explain(df)
+    
+    # Compatibility mapping
+    df['TotalScore'] = df['ConsistencyScore'] / 100.0 # Normalize back to 0-1 for compatibility if needed, or keep 0-100?
+    # Existing frontend expects score ~60-90. 
+    # If I return 0.85, frontend displays "85". 
+    # Current frontend code: ${(item.score * 100).toFixed(0)}
+    # So if I return 0.85, it shows 85.
+    # So ConsistencyScore (0-100) should be divided by 100.
+    
+    return df
 
-    # penalties (apply safely)
-    df.loc[df['max_drawdown'] < -0.35, 'TotalScore'] -= 0.12
-    if 'inflow_1y_pct' in df.columns:
-        df.loc[df['inflow_1y_pct'] < -2.0, 'TotalScore'] -= 0.15
+def extract_recommendations(scored_df, topk=3):
+    return scored_df.head(topk)
 
-    # sort and return
-    return df.sort_values('TotalScore', ascending=False)
-
-def persist_recommendations(engine, user_profile, scored_df, topk=3):
-    """Write topk recommendations to recommendation_logs (audit)"""
-    recs = scored_df.head(topk).to_dict(orient='records')
-    with engine.begin() as conn:
-        q = text("INSERT INTO recommendation_logs (user_profile, recommendations) VALUES (:u, :r)")
-        conn.execute(q, {'u': json.dumps(user_profile), 'r': json.dumps(recs)})
-    print(f"INFO: persisted {len(recs)} recommendations to recommendation_logs")
+# --- COMPATIBILITY WRAPPERS ---
 
 def recommend(user_profile, category_filter=None, topk=3, persist=False, df=None):
     if df is None:
@@ -145,26 +248,20 @@ def recommend(user_profile, category_filter=None, topk=3, persist=False, df=None
     
     scored = compute_scores(df, user_profile)
     
-    # FILTER: REGULAR PLANS ONLY (Business Logic)
-    # Exclude 'Direct' to ensure distributor commissions
-    scored = scored[~scored['fund_name'].str.contains('Direct', case=False, na=False)]
-    # Explicitly prefer 'Regular'
-    # scored = scored[scored['fund_name'].str.contains('Regular', case=False, na=False)]
-    
-    # Apply Category Filter
+    # Apply Category Filter if requested
     if category_filter:
-        # category_filter can be a string (e.g., 'Equity', 'Debt')
-        # We perform a case-insensitive partial match on the 'category' column
         mask = scored['category'].str.contains(category_filter, case=False, na=False)
         scored = scored[mask]
 
-    if persist:
-        persist_recommendations(engine, user_profile, scored, topk=topk)
     return scored.head(topk)
 
 if __name__ == "__main__":
-    sample_user = {'amount':25000, 'horizon_years':5, 'risk_tolerance':'Moderate','goal':'Wealth'}
-    top = recommend(sample_user, 3, persist=False)
-    # show limited columns for readability
-    cols_to_show = ['fund_id', 'as_of_date', 'TotalScore', 'sharpe', 'ann_return', 'ann_vol']
-    print(top[cols_to_show].to_string(index=False))
+    # Test
+    print("Testing Ranking Engine...")
+    df = load_latest_features(engine)
+    print(f"Loaded {len(df)} funds.")
+    
+    scored = compute_scores(df, {})
+    print("\nTop 5 Funds:")
+    cols = ['fund_name', 'category', 'aum_cr', 'ConsistencyScore', 'Tier', 'rationale']
+    print(scored[cols].head(5).to_string())

@@ -228,30 +228,71 @@ def generate_portfolio(user_profile):
                 }
             })
 
-    # 5. Generate Explanation
+    # 5. RECALCULATE WEIGHTS & ALLOCATION (Bottom-Up)
+    # Ensure consistency: Sum of weights = 100%, Allocation based on actuals
+    
+    total_pk = sum(p['amount'] for p in portfolio) if portfolio else 0
+    actual_allocation = {'Equity': 0.0, 'Debt': 0.0, 'Commodity': 0.0}
+    
+    if total_pk > 0:
+        for p in portfolio:
+            # 1. Update Weight
+            p['weight'] = round(p['amount'] / total_pk, 4)
+            
+            # 2. Update Allocation
+            # Thematic is Equity, Gold is Commodity
+            ac = p['asset_class']
+            
+            # Subtype handling (internal tag correction)
+            if 'Thematic' in ac:
+                p['asset_class'] = 'Equity' # Roll up to Equity
+                p['subtype'] = 'Thematic'
+            elif 'Commodity' in ac or 'Gold' in ac:
+                p['asset_class'] = 'Commodity'
+            
+            # Sum up
+            if p['asset_class'] in actual_allocation:
+                actual_allocation[p['asset_class']] += p['weight']
+            else:
+                # Fallback for unexpected types
+                actual_allocation[p['asset_class']] = actual_allocation.get(p['asset_class'], 0) + p['weight']
+
+    # Round allocation for display
+    for k in actual_allocation:
+        actual_allocation[k] = round(actual_allocation[k], 2)
+
+    # 6. Generate Explanation
     # Construct a temporary structure to pass to reasoning engine
-    temp_data = {"user_profile": user_profile, "allocation": allocation}
+    temp_data = {"user_profile": user_profile, "allocation": actual_allocation}
     explanation = explain_portfolio(temp_data, market_status)
 
-    # 6. Calculate Confidence Score
+    # 7. Calculate Confidence Score
     stability_score = generate_confidence_score(portfolio, market_phase)
 
-    # 7. Structure Output for UI
+    # 8. Structure Output for UI
+    # Explicitly filter by asset_class (now cleaned up)
     equity_schemes = [p for p in portfolio if p['asset_class'] == 'Equity']
     debt_schemes = [p for p in portfolio if p['asset_class'] == 'Debt']
+    commodity_schemes = [p for p in portfolio if p['asset_class'] == 'Commodity']
+    
+    # We pass 'sections' dynamically. Frontend handles keys it knows (Equity, Debt)
+    # But updated frontend also handles 'Commodities / Gold' via flat list filter.
+    # To be safe and cleaner, we can pass commodities in sections if we updated frontend data contract.
+    # The current frontend reads `data.portfolio` for flat filtering too.
     
     return {
         "user_profile": user_profile,
         "market_status": market_status,
-        "allocation": allocation,
-        "portfolio": portfolio, # Keep flat list for legacy or charts
+        "allocation": actual_allocation, # NOW THE TRUTH
+        "portfolio": portfolio, 
         "sections": {
             "equity": equity_schemes,
-            "debt": debt_schemes
+            "debt": debt_schemes,
+            "commodity": commodity_schemes
         },
         "breakdown": {
-            "lump_sum_total": total_amount,
-            "sip_total": round(total_amount * 0.015, 0) # 1.5% monthly SIP typical
+            "lump_sum_total": total_pk,
+            "sip_total": round(total_pk * 0.015, 0)
         },
         "explanation": explanation,
         "confidence_score": stability_score,
