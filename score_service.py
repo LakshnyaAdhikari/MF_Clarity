@@ -112,6 +112,9 @@ def apply_constraints(df):
     # (Assuming we want to recommend Regular plans)
     df = df[~df['fund_name'].str.contains('Direct', case=False, na=False)]
 
+    # 5. Exclude IDCW/Dividend Plans (Growth Only)
+    df = df[~df['fund_name'].str.contains('IDCW|Dividend|Bonus', case=False, na=False)]
+
     print(f"Constraints applied: {initial_count} -> {len(df)} funds remaining.")
     return df
 

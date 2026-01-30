@@ -71,18 +71,16 @@ def generate_portfolio(user_profile):
     equity_budget = total_amount * allocation['Equity']
     debt_budget = total_amount * allocation['Debt']
 
-    # --- NEW: COMMODITY & THEMATIC STRATEGY (For Large Portfolios) ---
-    # Only if amount > 5L for Gold, > 10L for Thematic
-    
-    # Gold/Commodity Slot
+    # --- GOLD/COMMODITY STRATEGY (Diversification) ---
+    # Only if amount > 5L
     if total_amount > 500000:
-        gold_budget = total_amount * 0.10 # 10% max allocation
-        # Re-balance Equity/Debt to accommodate Gold (Take 5% from each)
+        gold_budget = total_amount * 0.10 # 10% allocation
+        # Re-balance: Take 5% from Equity, 5% from Debt
         equity_budget -= (gold_budget * 0.5)
         debt_budget -= (gold_budget * 0.5)
         
         gold_funds = recommend(user_profile, category_filter='Commodity', topk=1, df=df_features).to_dict('records')
-        # If no explicit commodity fund, try Gold ETF/Fund
+        # If no explicit commodity fund, try Gold
         if not gold_funds:
              gold_funds = recommend(user_profile, category_filter='Gold', topk=1, df=df_features).to_dict('records')
              
@@ -90,103 +88,71 @@ def generate_portfolio(user_profile):
             f = gold_funds[0]
             portfolio.append({
                 "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
-                "asset_class": "Commodity", "weight": 0.10,
+                "asset_class": "Commodity", "weight": round(gold_budget / total_amount, 4),
                 "amount": round(gold_budget, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "Gold/Commodity as a hedge against inflation (Diversification)",
+                "rationale": "Gold as a hedge against inflation",
                 "metrics": {
                     "sharpe": round(f.get('sharpe', 0), 2),
                     "volatility": round(f.get('ann_vol', 0)*100, 1),
                     "returns": round(f.get('ann_return', 0)*100, 1)
                 }
             })
+    
 
-    # Thematic Slot (Very Large Portfolios > 10L)
-    if total_amount > 1000000:
-        theme_budget = total_amount * 0.10 # Another 10% 
-        equity_budget -= theme_budget # Take from Equity
-        
-        # Select consistent performing sector (e.g., Banking or Pharma - placeholder logic)
-        # In real world, we would analyze sector momentum. For now, pick highest scoring 'Sectoral'
-        theme_funds = recommend(user_profile, category_filter='Sectoral', topk=1, df=df_features).to_dict('records')
-        # Fallback: Mid Cap for high-growth alpha if no specific sector funds found
-        if not theme_funds:
-             theme_funds = recommend(user_profile, category_filter='Mid Cap', topk=1, df=df_features).to_dict('records')
-        
-        if theme_funds:
-            f = theme_funds[0]
-            portfolio.append({
-                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
-                "asset_class": "Equity (Thematic)", "weight": 0.10,
-                "amount": round(theme_budget, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "High-conviction Alpha bet (Sector/Mid Cap)",
-                "metrics": {
-                    "sharpe": round(f.get('sharpe', 0), 2),
-                    "volatility": round(f.get('ann_vol', 0)*100, 1),
-                    "returns": round(f.get('ann_return', 0)*100, 1)
-                }
-            })
 
-    # --- EQUITY STRATEGY (Remaining Budget) ---
+    # --- EQUITY STRATEGY (Explicit Slots) ---
     if equity_budget > 0:
-        # Recalculate weights relative to remaining budget if needed, or just use slots
-        # A. Core: Large Cap or Index
-        core_amt = equity_budget * 0.50 # Increased Core for Stability
-        core_funds = recommend(user_profile, category_filter='Large Cap', topk=1, df=df_features).to_dict('records')
-        if not core_funds: 
-             core_funds = recommend(user_profile, category_filter='Index Fund', topk=1, df=df_features).to_dict('records')
-        
-        if core_funds:
-            f = core_funds[0]
-            portfolio.append({
-                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
-                "asset_class": "Equity", "weight": round(core_amt / total_amount, 4),
-                "amount": round(core_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "Core Portfolio Anchor (Data: Consistent 5Y Returns)",
-                "metrics": {
-                    "sharpe": round(f.get('sharpe', 0), 2),
-                    "volatility": round(f.get('ann_vol', 0)*100, 1),
-                    "returns": round(f.get('ann_return', 0)*100, 1)
-                }
-            })
-            
-        # B. Growth: Flexi Cap
-        growth_amt = equity_budget * 0.30
-        growth_funds = recommend(user_profile, category_filter='Flexi Cap', topk=1, df=df_features).to_dict('records')
-        if growth_funds:
-            f = growth_funds[0]
-            portfolio.append({
-                "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
-                "asset_class": "Equity", "weight": round(growth_amt / total_amount, 4),
-                "amount": round(growth_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                "rationale": "Flexi Cap for validation-disciplined growth",
-                "metrics": {
-                    "sharpe": round(f.get('sharpe', 0), 2),
-                    "volatility": round(f.get('ann_vol', 0)*100, 1),
-                    "returns": round(f.get('ann_return', 0)*100, 1)
-                }
-            })
-            
-        # C. Alpha: Mid/Small Cap (20% of Equity) - Only if Risk is NOT Low
-        if user_profile.get('risk_tolerance', 'Moderate').lower() != 'low':
-            alpha_amt = equity_budget * 0.20
-            alpha_funds = recommend(user_profile, category_filter='Mid Cap', topk=1, df=df_features).to_dict('records')
-            if alpha_funds:
-                f = alpha_funds[0]
-                portfolio.append({
-                    "fund_id": f['fund_id'], "fund_name": f.get('fund_name'), "category": f.get('category'),
-                    "asset_class": "Equity", "weight": round(alpha_amt / total_amount, 4),
-                    "amount": round(alpha_amt, 2), "score": round(f.get('TotalScore', 0), 2),
-                    "rationale": "Mid Cap for extra returns (Alpha)",
-                    "metrics": {
-                        "sharpe": round(f.get('sharpe', 0), 2),
-                        "volatility": round(f.get('ann_vol', 0)*100, 1),
-                        "returns": round(f.get('ann_return', 0)*100, 1)
-                    }
-                })
+        risk_profile = user_profile.get('risk_tolerance', 'Moderate').lower()
+        selected_ids = {p['fund_id'] for p in portfolio}
+
+        def add_equity_slot(candidate_list, weight_pct, slot_rationale):
+             for f in candidate_list:
+                 if f['fund_id'] not in selected_ids:
+                     amt = equity_budget * weight_pct
+                     portfolio.append({
+                        "fund_id": f['fund_id'], 
+                        "fund_name": f.get('fund_name'), 
+                        "category": f.get('category'),
+                        "asset_class": "Equity", 
+                        "weight": round(amt / total_amount, 4),
+                        "amount": round(amt, 2), 
+                        "score": round(f.get('TotalScore', 0), 2),
+                        "rationale": slot_rationale,
+                        "metrics": {
+                            "sharpe": round(f.get('sharpe', 0), 2),
+                            "volatility": round(f.get('ann_vol', 0)*100, 1),
+                            "returns": round(f.get('ann_return', 0)*100, 1)
+                        }
+                     })
+                     selected_ids.add(f['fund_id'])
+                     return
+
+        # Strategy A: High/Moderate Risk -> Large + Mid + Small
+        if risk_profile not in ('low', 'conservative', 'safety'):
+             # Slot 1: Large (50%)
+             f_large = recommend(user_profile, category_filter='Large Cap', topk=1, df=df_features).to_dict('records')
+             if not f_large: f_large = recommend(user_profile, category_filter='Index Fund', topk=1, df=df_features).to_dict('records')
+             add_equity_slot(f_large, 0.50, "Core Anchor (Large Cap)")
+
+             # Slot 2: Mid (30%)
+             f_mid = recommend(user_profile, category_filter='Mid Cap', topk=2, df=df_features).to_dict('records')
+             add_equity_slot(f_mid, 0.30, "Growth Booster (Mid Cap)")
+
+             # Slot 3: Small (20%)
+             f_small = recommend(user_profile, category_filter='Small Cap', topk=2, df=df_features).to_dict('records')
+             add_equity_slot(f_small, 0.20, "High Alpha Potential (Small Cap)")
+
+        # Strategy B: Low Risk -> Large + Flexi
         else:
-            # If Low risk, move Alpha budget to Core
-            if portfolio: portfolio[0]['amount'] += round(equity_budget * 0.20, 2)
-            if portfolio: portfolio[0]['weight'] += round(alpha_amt / total_amount, 4) if 'alpha_amt' in locals() else round(equity_budget * 0.20 / total_amount, 4)
+             # Slot 1: Large (60%)
+             f_large = recommend(user_profile, category_filter='Large Cap', topk=1, df=df_features).to_dict('records')
+             if not f_large: f_large = recommend(user_profile, category_filter='Index Fund', topk=1, df=df_features).to_dict('records')
+             add_equity_slot(f_large, 0.60, "Core Anchor (Large Cap)")
+
+             # Slot 2: Flexi (40%)
+             f_flexi = recommend(user_profile, category_filter='Flexi Cap', topk=2, df=df_features).to_dict('records')
+             add_equity_slot(f_flexi, 0.40, "Stable Growth (Flexi Cap)")
+
 
     # --- DEBT STRATEGY ---
     if debt_budget > 0:
