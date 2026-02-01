@@ -27,6 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    print("--- REGISTERED ROUTES ---")
+    for route in app.routes:
+        print(f"{route.methods} {route.path}")
+    print("-------------------------")
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # --- DATA MODELS ---
@@ -216,23 +223,73 @@ def list_funds(current_user: str = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/funds/{fund_id}/alternatives")
+def get_alternatives(fund_id: str, current_user: str = Depends(get_current_user)):
+    try:
+        with engine.connect() as conn:
+            # 1. Get category of target fund
+            target = conn.execute(
+                text("SELECT category, fund_name FROM funds WHERE fund_id = :fid"), 
+                {'fid': fund_id}
+            ).fetchone()
+            
+            if not target:
+                raise HTTPException(status_code=404, detail="Fund not found")
+            
+            category = target[0]
+            
+            # 2. Find others in same category
+            # Limit to 3, exclude the current one
+            res = conn.execute(
+                text("""
+                    SELECT fund_id, fund_name, category, 
+                           COALESCE(ann_return_3y, 0) as ret, 
+                           COALESCE(standard_deviation, 0) as vol
+                    FROM funds 
+                    WHERE category = :cat AND fund_id != :fid
+                    ORDER BY ann_return_3y DESC
+                    LIMIT 3
+                """), 
+                {'cat': category, 'fid': fund_id}
+            )
+            
+            alts = []
+            for row in res:
+                alts.append({
+                    "fund_id": row[0],
+                    "fund_name": row[1],
+                    "category": row[2],
+                    "metrics": {"returns": round(float(row[3]), 2), "volatility": round(float(row[4]), 2)}
+                })
+            
+            return {"original": target[1], "alternatives": alts}
+            
+    except Exception as e:
+        print(f"Alt Error: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch alternatives")
+
 @app.post("/portfolio/save")
-def save_portfolio(data: RecommendationResponse, current_user: str = Depends(get_current_user)):
+def save_portfolio(data: Dict[str, Any], current_user: str = Depends(get_current_user)):
     user_id = get_user_id(current_user)
     if not user_id:
         raise HTTPException(status_code=404, detail="User not found")
     
     # Extract portfolio lists and allocation
-    # RecommendationResponse has 'portfolio' list and 'allocation' dict
-    # We save the 'portfolio' list as JSON
-    portfolio_list = [p.dict() for p in data.portfolio]
+    # Use .get() for safety against missing fields
+    portfolio = data.get('portfolio', [])
+    allocation = data.get('allocation', {})
+    market_phase = data.get('market_status', {}).get('phase', 'Unknown')
     
+    # Ensure portfolio is a list of dicts
+    if not isinstance(portfolio, list):
+        raise HTTPException(status_code=422, detail="Portfolio must be a list")
+
     try:
         pid = save_portfolio_snapshot(
             user_id=user_id,
-            portfolio_data=portfolio_list,
-            allocation=data.allocation,
-            market_phase=data.market_status.get('phase', 'Unknown')
+            portfolio_data=portfolio,
+            allocation=allocation,
+            market_phase=market_phase
         )
         return {"message": "Portfolio saved successfully", "id": pid}
     except Exception as e:
@@ -251,4 +308,4 @@ def get_latest(current_user: str = Depends(get_current_user)):
     return p
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

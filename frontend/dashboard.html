@@ -723,7 +723,7 @@
                             </div>
                             <!-- Placeholder for Alternatives -->
                             <div style="text-align:right;">
-                                <button class="btn-secondary" style="font-size:0.75rem; padding:0.2rem 0.6rem;" onclick="event.stopPropagation(); alert('Alternatives feature coming soon!')">Find Alternatives</button>
+                                <button class="btn-secondary" style="font-size:0.75rem; padding:0.2rem 0.6rem;" onclick="event.stopPropagation(); fetchAlternatives('${item.fund_id}')">Find Alternatives</button>
                             </div>
                         </div>
                     `;
@@ -732,27 +732,87 @@
             };
 
             // Use 'sections' if available, else fall back to 'portfolio'
-            // Use 'sections' if available, else fall back to 'portfolio'
             if (data.sections) {
                 renderSection('Equity Schemes', data.sections.equity);
-
-                // Add Commodity & Thematic/Other
-                // We accept 'commodity' or any other custom keys from backend if we decided to group them there.
-                // But currently portfolio_service puts them in 'portfolio' list but maybe not 'sections'?
-                // Let's filter from flat list if sections don't have them explicitly.
-
+                // ... (rest of filtering logic)
                 const commodities = data.portfolio.filter(p => p.asset_class === 'Commodity' || p.asset_class === 'Gold');
                 const thematic = data.portfolio.filter(p => p.asset_class.includes('Thematic'));
-
                 renderSection('Commodities / Gold', commodities);
                 renderSection('Thematic / Alpha', thematic);
-
                 renderSection('Debt Schemes', data.sections.debt);
             } else {
                 renderSection('Recommended Funds', data.portfolio);
             }
         }
+
+        // --- ALTERNATIVES LOGIC ---
+        async function fetchAlternatives(fundId) {
+            const token = localStorage.getItem('token');
+            const modal = document.getElementById('alt-modal');
+            const content = document.getElementById('alt-content');
+
+            modal.style.display = 'flex';
+            content.innerHTML = '<p>Searching market for better options...</p>';
+
+            try {
+                const res = await fetch(`/funds/${fundId}/alternatives`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (!res.ok) throw new Error("Fetch failed");
+                const data = await res.json();
+
+                content.innerHTML = `<h3>Alternatives to ${data.original}</h3>`;
+
+                if (data.alternatives.length === 0) {
+                    content.innerHTML += `<p>No better alternatives found in this category.</p>`;
+                    return;
+                }
+
+                data.alternatives.forEach(alt => {
+                    const div = document.createElement('div');
+                    div.style.background = 'rgba(255,255,255,0.05)';
+                    div.style.padding = '1rem';
+                    div.style.marginBottom = '0.5rem';
+                    div.style.borderRadius = '8px';
+                    div.style.display = 'flex';
+                    div.style.justifyContent = 'space-between';
+
+                    div.innerHTML = `
+                        <div>
+                            <div style="font-weight:bold; color:var(--color-primary);">${alt.fund_name}</div>
+                            <small>${alt.category}</small>
+                        </div>
+                        <div style="text-align:right; font-size:0.9rem;">
+                            <div>Returns: ${alt.metrics.returns}%</div>
+                            <div style="color:var(--color-text-dim);">Vol: ${alt.metrics.volatility}%</div>
+                        </div>
+                    `;
+                    content.appendChild(div);
+                });
+
+            } catch (e) {
+                content.innerHTML = `<p style="color:red">Error fetching alternatives.</p>`;
+                console.error(e);
+            }
+        }
+
+        function closeAltModal() {
+            document.getElementById('alt-modal').style.display = 'none';
+        }
     </script>
+
+    <!-- Alternatives Modal -->
+    <div id="alt-modal" class="modal-overlay" style="display:none; z-index:9999;">
+        <div class="glass-panel" style="width: 500px; max-width:90%">
+            <div style="display:flex; justify-content:space-between; margin-bottom:1rem;">
+                <h2>Similar Funds</h2>
+                <button onclick="closeAltModal()"
+                    style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <div id="alt-content"></div>
+        </div>
+    </div>
 </body>
 
 </html>
