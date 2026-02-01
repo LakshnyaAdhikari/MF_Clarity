@@ -2,16 +2,110 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=landing.html">
-    <title>Redirecting...</title>
-    <script>
-        window.location.href = "landing.html";
-    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MF-Clarity | Intelligent Portfolio Construction</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-    <p>If you are not redirected, <a href="landing.html">click here</a>.</p>
+    <!-- Navbar -->
+    <nav class="glass-nav">
+        <div class="logo">MF-Clarity</div>
+        <div class="nav-links">
+            <a href="login.html" class="btn-secondary">Login</a>
+            <a href="signup.html" class="btn-primary">Get Started</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="hero">
+        <div class="hero-content">
+            <div class="pill">● Live Market Intelligence</div>
+            <h1>Invest with <br> <span class="gradient-text">Absolute Clarity</span></h1>
+            <p class="subtitle">Stop guessing. Build a constraint-based, risk-adjusted mutual fund portfolio in seconds.
+                Powered by data, not commission agents.</p>
+
+            <div class="cta-group">
+                <a href="signup.html" class="btn-primary">Start Your Analytical Journey <span class="arrow">→</span></a>
+            </div>
+
+            <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--color-text-dim);">No credit card required • Free
+                during beta</p>
+        </div>
+    </header>
+
+    <!-- Trust Stats -->
+    <section class="stats-section">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <h3>₹500Cr+</h3>
+                <p>Assets Analyzed</p>
+            </div>
+            <div class="stat-item">
+                <h3>14,000+</h3>
+                <p>Funds Tracked</p>
+            </div>
+            <div class="stat-item">
+                <h3>Zero</h3>
+                <p>Commissions</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features / Value Prop -->
+    <section class="features">
+        <div class="feature-card">
+            <div class="icon">🛡️</div>
+            <h3>Constraint-First Safety</h3>
+            <p>We don't just chase returns. We strictly filter for consistency, downside protection, and avoiding credit
+                risks. Safety is our baseline.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">📊</div>
+            <h3>Consistency Index</h3>
+            <p>Our proprietary ranking engine scores funds on rolling returns and volatility, ensuring you pick
+                all-weather winners.</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon">🧠</div>
+            <h3>Explainable AI</h3>
+            <p>No black boxes. Every recommendation comes with a clear, plain-English rationale explaining exactly
+                <em>why</em> it fits you.</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-col">
+                <div class="logo" style="margin-bottom: 1rem;">MF-Clarity</div>
+                <p>Democratizing institutional-grade portfolio construction for the modern Indian investor.</p>
+            </div>
+            <div class="footer-col">
+                <h4>Product</h4>
+                <a href="#">Portfolio Analyzer</a>
+                <a href="#">Fund Explorer</a>
+                <a href="#">Risk Profiler</a>
+            </div>
+            <div class="footer-col">
+                <h4>Resources</h4>
+                <a href="#">Methodology</a>
+                <a href="#">Market Insights</a>
+                <a href="#">Help Center</a>
+            </div>
+            <div class="footer-col">
+                <h4>Legal</h4>
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+                <a href="#">Disclaimer</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 MF-Clarity Inc. All rights reserved. Not a registered investment advisor.</p>
+        </div>
+    </footer>
 </body>
 
 </html>

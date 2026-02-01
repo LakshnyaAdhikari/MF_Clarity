@@ -34,6 +34,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 class UserRegister(BaseModel):
     email: str
     password: str
+    phone: str = Field(..., description="Phone Number")
 
 class UserProfile(BaseModel):
     amount: float = Field(..., gt=0, description="Investment Amount")
@@ -101,8 +102,8 @@ def register(user: UserRegister):
             
             # Insert User
             res = conn.execute(
-                text("INSERT INTO users (email, password_hash) VALUES (:e, :p) RETURNING id"),
-                {'e': user.email, 'p': hashed_pw}
+                text("INSERT INTO users (email, password_hash, phone_number) VALUES (:e, :p, :ph) RETURNING id"),
+                {'e': user.email, 'p': hashed_pw, 'ph': user.phone}
             )
             user_id = res.fetchone()[0]
             

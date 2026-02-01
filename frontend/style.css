@@ -242,6 +242,8 @@ label {
 input[type="number"],
 input[type="email"],
 input[type="password"],
+input[type="text"],
+input[type="tel"],
 select {
   width: 100%;
   background: rgba(255, 255, 255, 0.05);
@@ -375,4 +377,84 @@ select:focus {
   color: var(--color-primary);
   font-size: 1.4rem;
   font-weight: 700;
+}
+
+/* Trust / Stats */
+.stats-section {
+  padding: 4rem 2rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.stats-grid {
+  display: flex;
+  justify-content: center;
+  gap: 4rem;
+  flex-wrap: wrap;
+  text-align: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.stat-item h3 {
+  font-size: 2.5rem;
+  color: var(--color-primary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-item p {
+  font-size: 1rem;
+  color: var(--color-text-dim);
+}
+
+/* Footer */
+footer {
+  padding: 5rem 2rem 2rem;
+  background: #080a0f;
+  border-top: 1px solid var(--glass-border);
+  margin-top: auto;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 3rem;
+  margin-bottom: 3rem;
+}
+
+.footer-col h4 {
+  color: white;
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+}
+
+.footer-col a {
+  display: block;
+  color: var(--color-text-dim);
+  text-decoration: none;
+  margin-bottom: 0.8rem;
+  transition: 0.3s;
+  font-size: 0.95rem;
+}
+
+.footer-col a:hover {
+  color: var(--color-primary);
+}
+
+.footer-bottom {
+  text-align: center;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--color-text-dim);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .footer-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
 }
