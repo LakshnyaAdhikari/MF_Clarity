@@ -797,7 +797,7 @@
                 });
 
             } catch (e) {
-                content.innerHTML = `<p style="color:red">Error fetching alternatives.</p>`;
+                content.innerHTML = `<p style="color:red">Error: ${e.message}</p>`;
                 console.error(e);
             }
         }

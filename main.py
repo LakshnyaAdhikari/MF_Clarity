@@ -239,15 +239,18 @@ def get_alternatives(fund_id: str, current_user: str = Depends(get_current_user)
             category = target[0]
             
             # 2. Find others in same category
-            # Limit to 3, exclude the current one
+            # Join with fund_features to get metrics
             res = conn.execute(
                 text("""
-                    SELECT fund_id, fund_name, category, 
-                           COALESCE(ann_return_3y, 0) as ret, 
-                           COALESCE(standard_deviation, 0) as vol
-                    FROM funds 
-                    WHERE category = :cat AND fund_id != :fid
-                    ORDER BY ann_return_3y DESC
+                    SELECT f.fund_id, f.fund_name, f.category, 
+                           COALESCE(ff.ann_return, 0) as ret, 
+                           COALESCE(ff.ann_vol, 0) as vol
+                    FROM funds f
+                    JOIN fund_features ff ON f.fund_id = ff.fund_id
+                    WHERE f.category = :cat 
+                      AND f.fund_id != :fid
+                      AND ff.as_of_date = (SELECT MAX(as_of_date) FROM fund_features)
+                    ORDER BY ff.ann_return DESC
                     LIMIT 3
                 """), 
                 {'cat': category, 'fid': fund_id}
@@ -255,18 +258,23 @@ def get_alternatives(fund_id: str, current_user: str = Depends(get_current_user)
             
             alts = []
             for row in res:
+                # Convert decimals/floats to python native types for JSON
+                r_val = float(row[3]) if row[3] is not None else 0.0
+                v_val = float(row[4]) if row[4] is not None else 0.0
+                
                 alts.append({
                     "fund_id": row[0],
                     "fund_name": row[1],
                     "category": row[2],
-                    "metrics": {"returns": round(float(row[3]), 2), "volatility": round(float(row[4]), 2)}
+                    "metrics": {"returns": round(r_val, 2), "volatility": round(v_val, 2)}
                 })
             
             return {"original": target[1], "alternatives": alts}
             
     except Exception as e:
         print(f"Alt Error: {e}")
-        raise HTTPException(status_code=500, detail="Could not fetch alternatives")
+        # Return the specific error message for debugging
+        raise HTTPException(status_code=500, detail=f"Alt Error: {str(e)}")
 
 @app.post("/portfolio/save")
 def save_portfolio(data: Dict[str, Any], current_user: str = Depends(get_current_user)):
