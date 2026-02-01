@@ -489,11 +489,13 @@
                     const d = await res.json();
                     alert("Strategy saved! ID: " + d.id);
                 } else {
-                    alert("Failed to save.");
+                    const errText = await res.text();
+                    alert(`Failed to save. Status: ${res.status}\nReason: ${errText}`);
+                    if (res.status === 401) window.location.href = 'login.html';
                 }
             } catch (e) {
                 console.error(e);
-                alert("Error saving.");
+                alert("Network Error saving strategy: " + e.message);
             } finally {
                 btn.innerText = "Save Strategy";
             }
@@ -747,7 +749,7 @@
 
         // --- ALTERNATIVES LOGIC ---
         async function fetchAlternatives(fundId) {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('access_token');
             const modal = document.getElementById('alt-modal');
             const content = document.getElementById('alt-content');
 
@@ -759,7 +761,10 @@
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
 
-                if (!res.ok) throw new Error("Fetch failed");
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(`Status ${res.status}: ${errText}`);
+                }
                 const data = await res.json();
 
                 content.innerHTML = `<h3>Alternatives to ${data.original}</h3>`;
