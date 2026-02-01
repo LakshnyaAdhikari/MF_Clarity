@@ -128,10 +128,16 @@ p {
 /* Hero */
 .hero {
   text-align: center;
-  padding: 6rem 1rem;
+  padding: 2rem 1rem 1rem 1rem;
+  /* Aggressively reduced padding */
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  /* Center content vertically */
+  min-height: 70vh;
+  /* Reduced from 90vh to force the next section to appear */
+  position: relative;
 }
 
 .pill {
@@ -381,7 +387,8 @@ select:focus {
 
 /* Trust / Stats */
 .stats-section {
-  padding: 4rem 2rem;
+  padding: 2rem 2rem 4rem 2rem;
+  /* Reduced top padding to pull it up */
   background: rgba(255, 255, 255, 0.02);
   border-top: 1px solid var(--glass-border);
   border-bottom: 1px solid var(--glass-border);
@@ -452,9 +459,149 @@ footer {
   font-size: 0.9rem;
 }
 
-@media (max-width: 768px) {
-  .footer-content {
-    grid-template-columns: 1fr;
-    text-align: center;
+/* New Icon Box Styling */
+.icon-box {
+  width: 60px;
+  height: 60px;
+  background: rgba(0, 242, 234, 0.1);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  color: var(--color-primary);
+  transition: 0.3s;
+}
+
+.feature-card:hover .icon-box {
+  background: var(--color-primary);
+  color: #000;
+  transform: scale(1.1);
+}
+
+.feature-icon {
+  width: 32px;
+  height: 32px;
+}
+
+/* Feature Card Interactive Polish */
+.feature-card {
+  /* Existing base styles overridden slightly */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s;
+}
+
+.feature-card:hover {
+  transform: translateY(-8px);
+  border-color: var(--color-primary);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Scroll Mouse Animation */
+.scroll-indicator {
+  position: absolute;
+  bottom: 3rem;
+  right: 4rem;
+  /* Moved to side */
+  left: auto;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  opacity: 0.7;
+  animation: fadeIn 2s ease-in-out;
+  z-index: 10;
+  /* Ensure above background */
+}
+
+/* Background Grid Texture (Fills empty sides) */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  /* Subtle grid pattern */
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  z-index: -1;
+  pointer-events: none;
+  /* Fade out towards edges */
+  mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 100%);
+  opacity: 0.6;
+}
+
+.scroll-indicator p {
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.mouse {
+  width: 26px;
+  height: 40px;
+  border: 2px solid var(--color-text-dim);
+  border-radius: 20px;
+  position: relative;
+}
+
+.mouse::before {
+  content: '';
+  width: 4px;
+  height: 8px;
+  background: var(--color-primary);
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  animation: scrollMouse 2s infinite;
+}
+
+@keyframes scrollMouse {
+  0% {
+    transform: translate(-50%, 0);
+    opacity: 1;
   }
+
+  100% {
+    transform: translate(-50%, 15px);
+    opacity: 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0.7;
+  }
+}
+
+/* Footer Link Fix */
+.footer-col a {
+  position: relative;
+  width: fit-content;
+}
+
+.footer-col a::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 1px;
+  bottom: -2px;
+  left: 0;
+  background-color: var(--color-primary);
+  transition: width 0.3s;
+}
+
+.footer-col a:hover::after {
+  width: 100%;
 }

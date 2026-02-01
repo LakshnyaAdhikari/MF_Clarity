@@ -13,7 +13,7 @@ from score_service import load_latest_features, engine
 from auth_service import (
     Token, verify_password, get_password_hash, create_access_token, decode_token, ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from memory_service import save_portfolio_snapshot, log_interaction, get_user_risk_score
+from memory_service import save_portfolio_snapshot, log_interaction, get_user_risk_score, get_latest_portfolio
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -216,5 +216,39 @@ def list_funds(current_user: str = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/portfolio/save")
+def save_portfolio(data: RecommendationResponse, current_user: str = Depends(get_current_user)):
+    user_id = get_user_id(current_user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Extract portfolio lists and allocation
+    # RecommendationResponse has 'portfolio' list and 'allocation' dict
+    # We save the 'portfolio' list as JSON
+    portfolio_list = [p.dict() for p in data.portfolio]
+    
+    try:
+        pid = save_portfolio_snapshot(
+            user_id=user_id,
+            portfolio_data=portfolio_list,
+            allocation=data.allocation,
+            market_phase=data.market_status.get('phase', 'Unknown')
+        )
+        return {"message": "Portfolio saved successfully", "id": pid}
+    except Exception as e:
+        print(f"Save Error: {e}")
+        raise HTTPException(status_code=500, detail="Could not save portfolio")
+
+@app.get("/portfolio/latest")
+def get_latest(current_user: str = Depends(get_current_user)):
+    user_id = get_user_id(current_user)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    p = get_latest_portfolio(user_id)
+    if not p:
+        return {"portfolio": None}
+    return p
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

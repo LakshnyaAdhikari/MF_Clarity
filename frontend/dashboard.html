@@ -354,7 +354,11 @@
             <div id="results-view" class="hidden">
                 <div class="glass-panel" style="margin-bottom: 2rem;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-                        <h2>Strategy Analysis</h2>
+                        <div style="display:flex; align-items:center; gap:1rem;">
+                            <h2>Strategy Analysis</h2>
+                            <button id="save-btn" class="btn-secondary"
+                                style="font-size:0.8rem; padding:0.4rem 0.8rem;">Save Strategy</button>
+                        </div>
                         <div style="text-align:right;">
                             <div id="market-phase-badge"></div>
                             <div class="confidence-meter">
@@ -418,6 +422,82 @@
         // Check Auth
         const token = localStorage.getItem('access_token');
         if (!token) window.location.href = 'login.html';
+
+        // Load latest portfolio if available
+        async function loadLatest() {
+            try {
+                const res = await fetch('/portfolio/latest', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.portfolio) {
+                        // The saved structure wraps it in "portfolio" object from memory_service
+                        // But renderDashboard expects the full RecResponse structure
+                        // We might need to reconstruct it or the memory service returns partial
+                        // Memory service returns: { portfolio: [...], allocation: {...}, market_phase: ..., saved_at: ... }
+
+                        // We need to map this back to what renderDashboard expects
+                        // renderDashboard expects: { market_status: {phase}, confidence_score, breakdown, explanation, allocation, portfolio, sections }
+                        // Our snapshot might be missing explanations/breakdown if not explicitly saved.
+                        // For now, let's just try to render what we have.
+
+                        // Reconstruct a mock object for render
+                        const reconstructed = {
+                            market_status: { phase: data.market_phase },
+                            confidence_score: 85, // Placeholder if not saved
+                            stability_label: 'Restored',
+                            explanation: `**Portfolio Restored**\nSaved on: ${new Date(data.saved_at).toLocaleDateString()}`,
+                            allocation: data.allocation,
+                            portfolio: data.portfolio.portfolio || data.portfolio, // Handle nesting if any
+                            breakdown: { lump_sum_total: 0, sip_total: 0 } // Placeholder
+                        };
+
+                        currentPortfolio = reconstructed; // Important for context
+                        renderDashboard(reconstructed);
+                    }
+                }
+            } catch (e) {
+                console.error("Load error", e);
+            }
+        }
+        loadLatest();
+
+        // Save Button Handler
+        document.getElementById('save-btn').addEventListener('click', async () => {
+            if (!currentPortfolio) {
+                alert("No strategy to save!");
+                return;
+            }
+            const btn = document.getElementById('save-btn');
+            btn.innerText = "Saving...";
+
+            try {
+                // Ensure currentPortfolio matches structure required by /portfolio/save
+                // The endpoint expects RecommendationResponse.
+                // We send currentPortfolio directly.
+                const res = await fetch('/portfolio/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(currentPortfolio)
+                });
+
+                if (res.ok) {
+                    const d = await res.json();
+                    alert("Strategy saved! ID: " + d.id);
+                } else {
+                    alert("Failed to save.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Error saving.");
+            } finally {
+                btn.innerText = "Save Strategy";
+            }
+        });
 
         let currentPortfolio = null; // Store for Context
 

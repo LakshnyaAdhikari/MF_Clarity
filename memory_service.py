@@ -62,3 +62,28 @@ def get_user_risk_score(user_id):
         if res:
             return res[0]
     return None
+
+def get_latest_portfolio(user_id):
+    """
+    Retrieves the most recent portfolio for the user.
+    """
+    if not user_id: return None
+    
+    with engine.connect() as conn:
+        query = text("""
+            SELECT portfolio_data, allocation_equity, allocation_debt, market_phase, created_at
+            FROM user_portfolios 
+            WHERE user_id = :uid 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        res = conn.execute(query, {'uid': user_id}).fetchone()
+        
+        if res:
+            return {
+                "portfolio": json.loads(res[0]),
+                "allocation": {"Equity": res[1], "Debt": res[2]},
+                "market_phase": res[3],
+                "saved_at": str(res[4])
+            }
+    return None
