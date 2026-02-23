@@ -13,7 +13,7 @@ if not DB_URL:
 engine = create_engine(DB_URL)
 
 # --- CONFIGURATION ---
-MIN_AUM_CR = 0 # TODO: Restore to 1000 once AUM data is populated
+MIN_AUM_CR = 1000  # Minimum AUM in Crores — filters out small/junk funds
 
 # Strict Category Whitelists
 EQUITY_CATEGORIES = [
@@ -78,9 +78,16 @@ def apply_constraints(df):
         if not df.empty:
             print(f"Sample Row: {df.iloc[0].to_dict()}")
 
-    # 1. AUM Constraint (> 1000 Cr)
-    # We handle NaNs by treating them as small (safe fail)
-    df = df[df['aum_cr'].fillna(0) >= MIN_AUM_CR]
+    # 1. AUM Constraint (>= 1000 Cr)
+    # Only apply if AUM data is actually populated in the DB.
+    # If all values are NaN (data not yet ingested), skip to avoid wiping everything out.
+    aum_populated = df['aum_cr'].notna().sum()
+    if aum_populated > 0:
+        df = df[df['aum_cr'].fillna(0) >= MIN_AUM_CR]
+        print(f"AUM filter applied (>= {MIN_AUM_CR} Cr): {initial_count} -> {len(df)}")
+    else:
+        print(f"WARNING: AUM data missing in DB — skipping AUM filter. Populate 'aum_cr' in funds table to enable.")
+
     
     # 2. Category Constraint
     # We only score funds in known safe/standard categories for the core recommendation engine.
@@ -121,60 +128,70 @@ def apply_constraints(df):
 def compute_consistency_index(df):
     """
     Calculates the 'Consistency Score' (0-100) comprising:
-    1. Reliability (Pos Months)
-    2. Downside Protection (Drawdown)
-    3. Risk-Adjusted Quality (Sharpe)
-    4. Safety Penalty (Volatility - esp for Debt)
+    1. Reliability    — % positive months (30%)
+    2. Downside       — Max drawdown protection (25%)
+    3. Quality        — Risk-adjusted returns / Sharpe (25%)
+    4. Momentum       — Recent performance 3m + 6m (20%)  <-- NEW
+    5. Debt Safety Penalty (applied after)
+
+    Momentum is scored WITHIN CATEGORY so a Large Cap isn't
+    penalized for lower returns vs a Small Cap.
     """
     # Fill defaults for missing metrics to avoid crashes
-    df['pct_pos_months_36'] = df['pct_pos_months_36'].fillna(0.5) # Assume avg
-    df['max_drawdown'] = df['max_drawdown'].fillna(-0.5) # Assume bad
-    df['sharpe'] = df['sharpe'].fillna(0)
-    df['ann_vol'] = df['ann_vol'].fillna(0.20)
-    df['ret_consistency'] = df['ret_consistency'].fillna(0)
+    df['pct_pos_months_36'] = df['pct_pos_months_36'].fillna(0.5)
+    df['max_drawdown']       = df['max_drawdown'].fillna(-0.5)
+    df['sharpe']             = df['sharpe'].fillna(0)
+    df['ann_vol']            = df['ann_vol'].fillna(0.20)
+    df['ret_consistency']    = df['ret_consistency'].fillna(0)
+    df['ret_3m']             = df['ret_3m'].fillna(0)
+    df['ret_6m']             = df['ret_6m'].fillna(0)
 
     # --- COMPONENT SCORING (Normalized 0-1) ---
-    
-    # 1. Reliability (40%) - Higher positive months is better
+
+    # 1. Reliability (30%) - Higher positive months is better
     df['score_rel'] = percentile_rank(df['pct_pos_months_36'], ascending=True)
-    
-    # 2. Downside (30%) - Lower magnitude drawdown is better (e.g. -10% > -20%)
-    # Max drawdown is negative number. Maximizing it (closer to 0) is good.
+
+    # 2. Downside (25%) - Max drawdown is negative; closer to 0 is better
     df['score_dd'] = percentile_rank(df['max_drawdown'], ascending=True)
-    
-    # 3. Quality (30%) - Higher Sharpe is better
+
+    # 3. Quality (25%) - Higher Sharpe is better
     df['score_qual'] = percentile_rank(df['sharpe'], ascending=True)
-    
-    # Base Consistency Score
+
+    # 4. Momentum (20%) — Category-aware: rank ret_3m and ret_6m WITHIN category
+    #    so that a Large Cap fund is compared to other Large Cap funds only.
+    #    Average of 3m and 6m percentile ranks within the fund's category.
+    df['score_mom_3m'] = df.groupby('category')['ret_3m'].rank(pct=True)
+    df['score_mom_6m'] = df.groupby('category')['ret_6m'].rank(pct=True)
+    df['score_mom']    = (df['score_mom_3m'] + df['score_mom_6m']) / 2
+    # Fill NaN for categories with only 1 fund (rank is undefined)
+    df['score_mom'] = df['score_mom'].fillna(0.5)
+
+    # --- COMPOSITE SCORE ---
     df['ConsistencyScore'] = (
-        0.40 * df['score_rel'] +
-        0.30 * df['score_dd'] + 
-        0.30 * df['score_qual']
+        0.30 * df['score_rel']  +
+        0.25 * df['score_dd']   +
+        0.25 * df['score_qual'] +
+        0.20 * df['score_mom']
     ) * 100
-    
+
     # --- DEBT SAFETY PENALTY ---
     # For debt funds, volatility is the enemy.
-    # If a debt fund is Volatile (relative to peers), crush its score.
-    
     def apply_debt_penalty(row):
         cols = str(row['category']).lower()
         is_debt = any(c.lower() in cols for c in DEBT_CATEGORIES)
-        
         if is_debt:
-            # Check volatility. Normal liquid/corp bond vol is < 3-4%. 
-            # If > 5%, it's risky.
-            if row['ann_vol'] > 0.05: 
-                return 25 # Massive penalty
-            if row['ann_vol'] > 0.03: 
-                return 10 # Moderate penalty
+            if row['ann_vol'] > 0.05:
+                return 25  # high volatility debt — massive penalty
+            if row['ann_vol'] > 0.03:
+                return 10  # moderate penalty
         return 0
 
     df['safety_penalty'] = df.apply(apply_debt_penalty, axis=1)
     df['ConsistencyScore'] = df['ConsistencyScore'] - df['safety_penalty']
-    
+
     # Clip to 0-100
     df['ConsistencyScore'] = df['ConsistencyScore'].clip(0, 100)
-    
+
     return df
 
 def assign_tiers_and_explain(df):
