@@ -11,8 +11,24 @@ frontend/node_modules/
 frontend/dist/
 .DS_Store
 
-# Logs
+# Logs & output files
 *.log
+*.txt
 
 # Env
 .env
+
+# Debug scripts (one-off, not part of source)
+debug_*.py
+
+# Test/check scripts (not part of source)
+test_*.py
+check_*.py
+inspect_*.py
+
+# One-off migration/utility scripts
+update_db_phone.py
+verify_refactor.py
+
+# Leftover root-level package-lock (not needed, frontend has its own)
+/package-lock.json
