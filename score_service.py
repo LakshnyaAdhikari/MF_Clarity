@@ -146,25 +146,33 @@ def compute_consistency_index(df):
     df['ret_3m']             = df['ret_3m'].fillna(0)
     df['ret_6m']             = df['ret_6m'].fillna(0)
 
-    # --- COMPONENT SCORING (Normalized 0-1) ---
+    # --- COMPONENT SCORING: ALL RANKED WITHIN CATEGORY ---
+    # A Large Cap is only compared to other Large Caps.
+    # A Liquid fund is only compared to other Liquid funds.
+    # This prevents debt funds dominating equity slots due to structurally
+    # lower volatility/drawdown that has nothing to do with quality.
 
-    # 1. Reliability (30%) - Higher positive months is better
-    df['score_rel'] = percentile_rank(df['pct_pos_months_36'], ascending=True)
+    def cat_rank(col, ascending=True):
+        """Percentile rank of `col` within each category group."""
+        ranked = df.groupby('category')[col].rank(pct=True)
+        if not ascending:
+            ranked = 1 - ranked
+        # Single-fund categories get NaN from rank — default to 0.5 (neutral)
+        return ranked.fillna(0.5)
 
-    # 2. Downside (25%) - Max drawdown is negative; closer to 0 is better
-    df['score_dd'] = percentile_rank(df['max_drawdown'], ascending=True)
+    # 1. Reliability (30%) — % positive months, ranked within category
+    df['score_rel'] = cat_rank('pct_pos_months_36', ascending=True)
 
-    # 3. Quality (25%) - Higher Sharpe is better
-    df['score_qual'] = percentile_rank(df['sharpe'], ascending=True)
+    # 2. Downside (25%) — max drawdown (negative), closer to 0 = better
+    df['score_dd'] = cat_rank('max_drawdown', ascending=True)
 
-    # 4. Momentum (20%) — Category-aware: rank ret_3m and ret_6m WITHIN category
-    #    so that a Large Cap fund is compared to other Large Cap funds only.
-    #    Average of 3m and 6m percentile ranks within the fund's category.
-    df['score_mom_3m'] = df.groupby('category')['ret_3m'].rank(pct=True)
-    df['score_mom_6m'] = df.groupby('category')['ret_6m'].rank(pct=True)
+    # 3. Quality (25%) — Sharpe ratio, ranked within category
+    df['score_qual'] = cat_rank('sharpe', ascending=True)
+
+    # 4. Momentum (20%) — avg of 3m and 6m return ranks, within category
+    df['score_mom_3m'] = df.groupby('category')['ret_3m'].rank(pct=True).fillna(0.5)
+    df['score_mom_6m'] = df.groupby('category')['ret_6m'].rank(pct=True).fillna(0.5)
     df['score_mom']    = (df['score_mom_3m'] + df['score_mom_6m']) / 2
-    # Fill NaN for categories with only 1 fund (rank is undefined)
-    df['score_mom'] = df['score_mom'].fillna(0.5)
 
     # --- COMPOSITE SCORE ---
     df['ConsistencyScore'] = (
